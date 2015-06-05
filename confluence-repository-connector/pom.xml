@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<parent>
+		<groupId>org.apache.manifoldcf</groupId>
+		<artifactId>mcf-connectors</artifactId>
+		<version>2.0.2</version>
+	</parent>
+
+	<name>ManifoldCF - Connectors - Confluence Repository Connector</name>
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>mcf-confluence-repository-connector</artifactId>
+	<packaging>jar</packaging>
+	
+	<developers>
+		<developer>
+			<name>Antonio David Perez Morales</name>
+			<email>adperezmorales@gmail.com</email>
+		</developer>
+	</developers>
+
+
+</project>
