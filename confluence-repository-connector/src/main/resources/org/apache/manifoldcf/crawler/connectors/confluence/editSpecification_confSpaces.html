@@ -1,0 +1,17 @@
+#if($TabName == $ResourceBundle.getString('ConfluenceRepositoryConnector.Space') && ${SeqNum} == ${SelectedNum})
+
+<table class="displaytable">
+   <tr>
+    <td class="description">
+      <nobr>$Encoder.bodyEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Space'))</nobr>
+    </td>
+    <td class="value">
+      <input size="32" type="text" id="s${SeqNum}_space" name="s${SeqNum}_space" value="$Encoder.attributeEscape($space)" />
+    </td>
+  </tr>
+
+#else
+
+<input type="hidden" name="s${SeqNum}_space" value="$space"/>
+
+#end

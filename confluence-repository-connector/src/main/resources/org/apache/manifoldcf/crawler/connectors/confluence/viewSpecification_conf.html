@@ -1,0 +1,15 @@
+<table class="displaytable">
+  <tr>
+    <td class="description">
+      <nobr>$Encoder.bodyEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Space')):</nobr>
+    </td>
+    <td class="value">
+    	#if($space && !$space.isEmpty()) 
+    	<nobr>$Encoder.bodyEscape($space)</nobr>
+    	#else
+		No spaces configured. All spaces will be crawled
+		#end
+    </td>
+  </tr>
+
+</table>
