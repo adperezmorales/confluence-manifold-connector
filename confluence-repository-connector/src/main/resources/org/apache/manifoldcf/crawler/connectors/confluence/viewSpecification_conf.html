@@ -1,15 +1,21 @@
 <table class="displaytable">
   <tr>
+#if($SPACES.size() == 0)
+    <td class="message" colspan="2">
+      $Encoder.bodyEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.NoSpacesConfigured'))
+    </td>
+#else
     <td class="description">
-      <nobr>$Encoder.bodyEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Space')):</nobr>
+      <nobr>$Encoder.bodyEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Spaces'))</nobr>
     </td>
     <td class="value">
-    	#if($space && !$space.isEmpty()) 
-    	<nobr>$Encoder.bodyEscape($space)</nobr>
-    	#else
-		No spaces configured. All spaces will be crawled
-		#end
+  #set($spacecounter = 0)
+  #foreach($space in $SPACES)
+    <nobr>$Encoder.bodyEscape($space)</nobr><br/>
+    #set($spacecounter = $spacecounter + 1)
+  #end
     </td>
+#end
   </tr>
 
 </table>

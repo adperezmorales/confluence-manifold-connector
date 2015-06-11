@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Optional;
+import com.google.common.collect.Lists;
 
 /**
  * <p>
@@ -65,7 +66,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	private static final String CONF_SERVER_TAB_PROPERTY = "ConfluenceRepositoryConnector.Server";
 
 	/* Specification tabs */
-	private static final String CONF_SPACES_TAB_PROPERTY = "ConfluenceRepositoryConnector.Space";
+	private static final String CONF_SPACES_TAB_PROPERTY = "ConfluenceRepositoryConnector.Spaces";
 
 	// pages & js
 	// Template names for Confluence configuration
@@ -478,11 +479,9 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 
 	private void fillInConfSpacesSpecificationMap(Map<String, Object> newMap,
 			Specification ds) {
-		// List<String> spaceKeysList = new ArrayList<String>();
-		Optional<String> space = this.getSpaceFromSpecification(ds);
+		List<String> spaceKeysList = this.getSpacesFromSpecification(ds);
 
-		newMap.put(ConfluenceConfiguration.Specification.SPACE,
-				space.isPresent() ? space.get() : "");
+		newMap.put(ConfluenceConfiguration.Specification.SPACES.toUpperCase(), spaceKeysList);
 	}
 
 	@Override
@@ -515,29 +514,56 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 
 		String seqPrefix = "s" + connectionSequenceNumber + "_";
 
-		// Delete all preconfigured spaces
-		int i = 0;
-		while (i < ds.getChildCount()) {
-			SpecificationNode sn = ds.getChild(i);
-			if (sn.getType().equals(
-					ConfluenceConfiguration.Specification.SPACES))
-				ds.removeChild(i);
-			else
+		String xc = variableContext.getParameter(seqPrefix + "spacescount");
+		if (xc != null) {
+			// Delete all preconfigured spaces
+			int i = 0;
+			while (i < ds.getChildCount()) {
+				SpecificationNode sn = ds.getChild(i);
+				if (sn.getType().equals(
+						ConfluenceConfiguration.Specification.SPACES))
+					ds.removeChild(i);
+				else
+					i++;
+			}
+
+			SpecificationNode spaces = new SpecificationNode(
+					ConfluenceConfiguration.Specification.SPACES);
+			ds.addChild(ds.getChildCount(), spaces);
+			int spacesCount = Integer.parseInt(xc);
+			i = 0;
+			while (i < spacesCount) {
+				String spaceDescription = "_" + Integer.toString(i);
+				String spaceOpName = seqPrefix + "spaceop" + spaceDescription;
+				xc = variableContext.getParameter(spaceOpName);
+				if (xc != null && xc.equals("Delete")) {
+					// Next row
+					i++;
+					continue;
+				}
+				// Get the stuff we need
+				String spaceKey = variableContext.getParameter(seqPrefix
+						+ "space" + spaceDescription);
+				SpecificationNode node = new SpecificationNode(
+						ConfluenceConfiguration.Specification.SPACE);
+				node.setAttribute(
+						ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE,
+						spaceKey);
+				spaces.addChild(spaces.getChildCount(), node);
 				i++;
-		}
+			}
 
-		SpecificationNode spaces = new SpecificationNode(
-				ConfluenceConfiguration.Specification.SPACES);
-		ds.addChild(ds.getChildCount(), spaces);
-
-		String spaceKey = variableContext.getParameter(seqPrefix + "space");
-		if (spaceKey != null && !spaceKey.isEmpty()) {
-			SpecificationNode node = new SpecificationNode(
-					ConfluenceConfiguration.Specification.SPACE);
-			node.setAttribute(
-					ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE,
-					spaceKey);
-			spaces.addChild(spaces.getChildCount(), node);
+			String op = variableContext.getParameter(seqPrefix + "spaceop");
+			if (op != null && op.equals("Add")) {
+				String spaceSpec = variableContext.getParameter(seqPrefix
+						+ "space");
+				SpecificationNode node = new SpecificationNode(
+						ConfluenceConfiguration.Specification.SPACE);
+				node.setAttribute(
+						ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE,
+						spaceSpec);
+				spaces.addChild(spaces.getChildCount(), node);
+			}
 		}
 
 		return null;
@@ -610,8 +636,6 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		}
 
 		try {
-			long lastStart = 0;
-			long defaultSize = 50;
 
 			/*
 			 * Not uses delta seeding because Confluence can't be queried using
@@ -627,15 +651,53 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			// lastStart = new Long(lastSeedVersion);
 			// }
 
-			if (Logging.connectors != null
-					&& Logging.connectors.isDebugEnabled())
-				Logging.connectors.debug(MessageFormat.format(
-						"Starting from {0} and size {1}", new Object[] {
-								lastStart, defaultSize }));
+			List<String> spaceKeys = this.getSpacesFromSpecification(spec);
 
+			if (spaceKeys.isEmpty()) {
+				logger.info("No spaces configured. Processing all spaces");
+				addSeedDocumentsForSpace(Optional.<String> absent(),
+						activities, spec, lastSeedVersion, seedTime, jobMode);
+			} else {
+				for (String space : spaceKeys) {
+					logger.info("Processing configured space {}", space);
+					addSeedDocumentsForSpace(Optional.<String> of(space),
+							activities, spec, lastSeedVersion, seedTime,
+							jobMode);
+				}
+			}
+
+			return "";
+		} catch (Exception e) {
+			handleConfluenceDownException(e, "seeding");
+			return null;
+		}
+	}
+
+	/**
+	 * <p>
+	 * Add seed documents for a given optional space
+	 * </p>
+	 * 
+	 * @throws ServiceInterruption
+	 * @throws ManifoldCFException
+	 */
+	private void addSeedDocumentsForSpace(Optional<String> space,
+			ISeedingActivity activities, Specification spec,
+			String lastSeedVersion, long seedTime, int jobMode)
+			throws ManifoldCFException, ServiceInterruption {
+
+		long lastStart = 0;
+		long defaultSize = 50;
+
+		if (Logging.connectors != null && Logging.connectors.isDebugEnabled()) {
+			String spaceDesc = space.isPresent() ? "space with key "+space.get() : "all the spaces";
+			Logging.connectors.debug(MessageFormat.format(
+					"Starting from {0} and size {1} for {2}", new Object[] { lastStart,
+							defaultSize, spaceDesc }));
+		}
+		
+		try {
 			Boolean isLast = true;
-
-			Optional<String> space = getSpaceFromSpecification(spec);
 			do {
 				final ConfluenceResponse response = confluenceClient.getPages(
 						(int) lastStart, (int) defaultSize, space);
@@ -660,21 +722,19 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 									lastStart, defaultSize }));
 			} while (!isLast);
 
-			if (Logging.connectors != null
-					&& Logging.connectors.isDebugEnabled())
-				Logging.connectors.debug(MessageFormat.format(
-						"Recording {0} as last start id",
-						new Object[] { lastStart }));
-			return "";
 		} catch (Exception e) {
 			handleConfluenceDownException(e, "seeding");
-			return null;
 		}
+
 	}
 
-	@SuppressWarnings("unchecked")
-	private Optional<String> getSpaceFromSpecification(Specification spec) {
-		String space = "";
+	/**
+	 * <p>Get list of configured spaces from Specification</p>
+	 * @param spec
+	 * @return a {@code List} of spaces
+	 */
+	private List<String> getSpacesFromSpecification(Specification spec) {
+		List<String> spaceKeysList = Lists.newArrayList();
 		for (int i = 0, len = spec.getChildCount(); i < len; i++) {
 			SpecificationNode sn = spec.getChild(i);
 			if (sn.getType().equals(
@@ -683,19 +743,16 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 					SpecificationNode specNode = sn.getChild(j);
 					if (specNode.getType().equals(
 							ConfluenceConfiguration.Specification.SPACE)) {
-						// spaceKeysList
-						// .add(specNode
-						// .getAttributeValue(ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE));
-						space = specNode
-								.getAttributeValue(ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE);
-						break;
+						spaceKeysList
+								.add(specNode
+										.getAttributeValue(ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE));
+
 					}
 				}
 
 			}
 		}
-		return (Optional<String>) (space != null && !space.isEmpty() ? Optional
-				.of(space) : Optional.absent());
+		return spaceKeysList;
 	}
 
 	protected static void handleConfluenceDownException(Exception e,
@@ -752,7 +809,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 				}
 
 				Page page = confluenceClient.getPage(pageId);
-				
+
 				/* Remove page if content is null */
 				/* Content is null if there was an error trying to get the page */
 				if (page.getContent() == null) {
@@ -768,16 +825,18 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 				Date createdDate = page.getCreatedDate();
 				Date lastModified = page.getLastModifiedDate();
 				DateFormat df = DateFormat.getDateTimeInstance();
-				
-				/* Retain page in Manifold because it has not changed from last time
-				 * This is needed to keep the identifier in Manifold data, because by default
-				 * if a document is not retained nor ingested, it will be deleted by the framework
+
+				/*
+				 * Retain page in Manifold because it has not changed from last
+				 * time This is needed to keep the identifier in Manifold data,
+				 * because by default if a document is not retained nor
+				 * ingested, it will be deleted by the framework
 				 */
 				if (version != null && version.equals(df.format(lastModified))) {
 					activities.retainAllComponentDocument(pageId);
 					continue;
 				}
-				
+
 				/* Add repository document information */
 				rd.setMimeType(page.getMimetype());
 				if (createdDate != null)
@@ -785,21 +844,23 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 				if (lastModified != null)
 					rd.setModifiedDate(lastModified);
 				rd.setIndexingDate(new Date());
-				
+
 				/* Adding Page Metadata */
-				Map<String,String> pageMetadata = page.getMetadataAsMap();
-				for(Entry<String,String> entry : pageMetadata.entrySet()) {
+				Map<String, String> pageMetadata = page.getMetadataAsMap();
+				for (Entry<String, String> entry : pageMetadata.entrySet()) {
 					rd.addField(entry.getKey(), entry.getValue());
 				}
-				
+
 				String documentURI = page.getWebUrl();
 				String content = page.getContent();
-				
+
 				/* Set repository document ACLs */
 				rd.setSecurityACL(RepositoryDocument.SECURITY_TYPE_DOCUMENT,
 						new String[] { page.getSpace() });
-				rd.setSecurityDenyACL(RepositoryDocument.SECURITY_TYPE_DOCUMENT, new String[]{defaultAuthorityDenyToken});
-				
+				rd.setSecurityDenyACL(
+						RepositoryDocument.SECURITY_TYPE_DOCUMENT,
+						new String[] { defaultAuthorityDenyToken });
+
 				try {
 					byte[] documentBytes = content
 							.getBytes(StandardCharsets.UTF_8);
@@ -808,7 +869,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 						rd.setBinary(is, documentBytes.length);
 						rd.addField("size",
 								String.valueOf(documentBytes.length));
-						
+
 						/* Ingest document */
 						activities.ingestDocumentWithException(pageId,
 								df.format(lastModified), documentURI, rd);
