@@ -67,6 +67,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 
 	/* Specification tabs */
 	private static final String CONF_SPACES_TAB_PROPERTY = "ConfluenceRepositoryConnector.Spaces";
+	private static final String CONF_PAGES_TAB_PROPERTY = "ConfluenceRepositoryConnector.Pages";
 
 	// pages & js
 	// Template names for Confluence configuration
@@ -94,6 +95,11 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * Forward to the template to edit the spaces for the job
 	 */
 	private static final String EDIT_SPEC_FORWARD_SPACES = "editSpecification_confSpaces.html";
+
+	/**
+	 * Forward to the template to edit the pages configuration for the job
+	 */
+	private static final String EDIT_SPEC_FORWARD_CONF_PAGES = "editSpecification_confPages.html";
 
 	/**
 	 * Forward to the template to view the specification parameters for the job
@@ -477,11 +483,50 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		return null;
 	}
 
+	/**
+	 * <p>
+	 * Fill the configured spaces into the map
+	 * </p>
+	 * 
+	 * @param newMap
+	 * @param ds
+	 */
 	private void fillInConfSpacesSpecificationMap(Map<String, Object> newMap,
 			Specification ds) {
 		List<String> spaceKeysList = this.getSpacesFromSpecification(ds);
 
-		newMap.put(ConfluenceConfiguration.Specification.SPACES.toUpperCase(), spaceKeysList);
+		newMap.put(ConfluenceConfiguration.Specification.SPACES.toUpperCase(),
+				spaceKeysList);
+	}
+
+	/**
+	 * <p>
+	 * Fill the pages configuration into the map
+	 * </p>
+	 * 
+	 * @param newMap
+	 * @param ds
+	 */
+	private void fillInConfPagesSpecificationMap(Map<String, Object> newMap,
+			Specification ds) {
+		
+		Boolean procAttachments = false;
+		for (int i = 0, len = ds.getChildCount(); i < len; i++) {
+			SpecificationNode sn = ds.getChild(i);
+			if (sn.getType()
+					.equals(ConfluenceConfiguration.Specification.PAGES)) {
+				String processAttachments = sn
+						.getAttributeValue(ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY);
+				procAttachments = Boolean.valueOf(processAttachments);
+				break;
+			}
+		}
+		
+		newMap.put(
+				ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY
+						.toUpperCase(), procAttachments);
+		return;
+
 	}
 
 	@Override
@@ -493,6 +538,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		paramMap.put("SeqNum", Integer.toString(connectionSequenceNumber));
 
 		fillInConfSpacesSpecificationMap(paramMap, ds);
+		fillInConfPagesSpecificationMap(paramMap, ds);
 
 		Messages.outputResourceWithVelocity(out, locale, VIEW_SPEC_FORWARD,
 				paramMap);
@@ -566,6 +612,30 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			}
 		}
 
+		/* Delete pages configuration */
+		int i = 0;
+		while (i < ds.getChildCount()) {
+			SpecificationNode sn = ds.getChild(i);
+			if (sn.getType()
+					.equals(ConfluenceConfiguration.Specification.PAGES))
+				ds.removeChild(i);
+			else
+				i++;
+		}
+
+		SpecificationNode pages = new SpecificationNode(
+				ConfluenceConfiguration.Specification.PAGES);
+		ds.addChild(ds.getChildCount(), pages);
+
+		String procAttachments = variableContext
+				.getParameter(seqPrefix
+						+ ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY);
+		if (procAttachments != null && !procAttachments.isEmpty()) {
+			pages.setAttribute(
+					ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY,
+					String.valueOf(procAttachments));
+		}
+
 		return null;
 	}
 
@@ -591,8 +661,12 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		paramMap.put("SelectedNum", Integer.toString(actualSequenceNumber));
 
 		fillInConfSpacesSpecificationMap(paramMap, ds);
+		fillInConfPagesSpecificationMap(paramMap, ds);
 		Messages.outputResourceWithVelocity(out, locale,
 				EDIT_SPEC_FORWARD_SPACES, paramMap);
+		
+		Messages.outputResourceWithVelocity(out, locale,
+				EDIT_SPEC_FORWARD_CONF_PAGES, paramMap);
 	}
 
 	/*
@@ -610,6 +684,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			List<String> tabsArray) throws ManifoldCFException, IOException {
 
 		tabsArray.add(Messages.getString(locale, CONF_SPACES_TAB_PROPERTY));
+		tabsArray.add(Messages.getString(locale, CONF_PAGES_TAB_PROPERTY));
 
 		Map<String, Object> paramMap = new HashMap<String, Object>();
 		paramMap.put("SeqNum", Integer.toString(connectionSequenceNumber));
@@ -690,12 +765,13 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		long defaultSize = 50;
 
 		if (Logging.connectors != null && Logging.connectors.isDebugEnabled()) {
-			String spaceDesc = space.isPresent() ? "space with key "+space.get() : "all the spaces";
+			String spaceDesc = space.isPresent() ? "space with key "
+					+ space.get() : "all the spaces";
 			Logging.connectors.debug(MessageFormat.format(
-					"Starting from {0} and size {1} for {2}", new Object[] { lastStart,
-							defaultSize, spaceDesc }));
+					"Starting from {0} and size {1} for {2}", new Object[] {
+							lastStart, defaultSize, spaceDesc }));
 		}
-		
+
 		try {
 			Boolean isLast = true;
 			do {
@@ -729,7 +805,10 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	}
 
 	/**
-	 * <p>Get list of configured spaces from Specification</p>
+	 * <p>
+	 * Get list of configured spaces from Specification
+	 * </p>
+	 * 
 	 * @param spec
 	 * @return a {@code List} of spaces
 	 */
