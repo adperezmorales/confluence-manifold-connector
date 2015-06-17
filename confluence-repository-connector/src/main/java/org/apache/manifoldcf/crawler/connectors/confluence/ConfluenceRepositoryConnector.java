@@ -770,7 +770,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		try {
 			Boolean isLast = true;
 			do {
-				final ConfluenceResponse response = confluenceClient.getPages(
+				final ConfluenceResponse<Page> response = confluenceClient.getPages(
 						(int) lastStart, (int) defaultSize, space);
 
 				int count = 0;
@@ -819,7 +819,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		if (Logging.connectors != null && Logging.connectors.isDebugEnabled()) {
 			Logging.connectors
 					.debug(MessageFormat
-							.format("Processing page {0} attachments starting from {1} and size {2}",
+							.format("Processing page {} attachments starting from {} and size {}",
 									new Object[] { page.getId(), lastStart,
 											defaultSize }));
 		}
@@ -827,7 +827,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		try {
 			Boolean isLast = true;
 			do {
-				final ConfluenceResponse response = confluenceClient
+				final ConfluenceResponse<Attachment> response = confluenceClient
 						.getPageAttachments(page.getId(), (int) lastStart,
 								(int) defaultSize);
 
@@ -843,7 +843,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 						&& Logging.connectors.isDebugEnabled())
 					Logging.connectors
 							.debug(MessageFormat
-									.format("Fetched and added {0} seed document attachments for page {1}",
+									.format("Fetched and added {} seed document attachments for page {}",
 											new Object[] { new Integer(count),
 													page.getId() }));
 
@@ -1054,9 +1054,15 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		rd.setIndexingDate(new Date());
 
 		/* Adding Page Metadata */
-		Map<String, String> pageMetadata = page.getMetadataAsMap();
-		for (Entry<String, String> entry : pageMetadata.entrySet()) {
-			rd.addField(entry.getKey(), entry.getValue());
+		Map<String, Object> pageMetadata = page.getMetadataAsMap();
+		for (Entry<String, Object> entry : pageMetadata.entrySet()) {
+			if(entry.getValue() instanceof List) {
+				List<?> list = (List<?>)entry.getValue();
+				rd.addField(entry.getKey(), list.toArray(new String[list.size()]));
+			}
+			else {
+				rd.addField(entry.getKey(), entry.getValue().toString());
+			}
 		}
 
 		/* Adding extra properties */
