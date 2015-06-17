@@ -3,25 +3,26 @@ package org.apache.manifoldcf.crawler.connectors.confluence.model;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.manifoldcf.crawler.connectors.confluence.model.builder.ConfluenceResourceBuilder;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-public class ConfluenceResponse {
+public class ConfluenceResponse<T extends ConfluenceResource> {
 
-	private List<Page> results;
+	private List<T> results;
 	private int start;
 	private int limit;
 	private Boolean isLast;
 	
-	public ConfluenceResponse(List<Page> results, int start, int limit, Boolean isLast) {
+	public ConfluenceResponse(List<T> results, int start, int limit, Boolean isLast) {
 		this.results = results;
 		this.start = start;
 		this.limit = limit;
 		this.isLast = isLast;
 	}
 	
-	public List<Page> getResults() {
+	public List<T> getResults() {
 		return this.results;
 	}
 	
@@ -37,14 +38,14 @@ public class ConfluenceResponse {
 		return isLast;
 	}
 	
-	public static ConfluenceResponse fromJson(JSONObject response) {
-		List<Page> pages = new ArrayList<Page>();
+	public static <T extends ConfluenceResource> ConfluenceResponse<T> fromJson(JSONObject response, ConfluenceResourceBuilder<T> builder) {
+		List<T> resources = new ArrayList<T>();
 		try {
 			JSONArray jsonArray = response.getJSONArray("results");
 			for(int i=0,size=jsonArray.length(); i<size;i++) {
 				JSONObject jsonPage = jsonArray.getJSONObject(i);
-				Page page = Page.builder().fromJson(jsonPage);
-				pages.add(page);
+				T resource = (T) builder.fromJson(jsonPage);
+				resources.add(resource);
 			}
 			
 			int limit = response.getInt("limit");
@@ -55,13 +56,13 @@ public class ConfluenceResponse {
 				isLast = links.optString("next", "undefined").equalsIgnoreCase("undefined");
 			}
 			
-			return new ConfluenceResponse(pages, start, limit, isLast);
+			return new ConfluenceResponse<T>(resources, start, limit, isLast);
 			
 		} catch (JSONException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
-		return new ConfluenceResponse(new ArrayList<Page>(), 0,0,false);
+		return new ConfluenceResponse<T>(new ArrayList<T>(), 0,0,false);
 	}
 }

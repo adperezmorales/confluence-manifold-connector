@@ -3,6 +3,7 @@ package org.apache.manifoldcf.crawler.connectors.confluence.client;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.List;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
@@ -14,15 +15,20 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.Attachment;
+import org.apache.manifoldcf.crawler.connectors.confluence.model.ConfluenceResource;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.ConfluenceResponse;
+import org.apache.manifoldcf.crawler.connectors.confluence.model.Label;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.MutableAttachment;
+import org.apache.manifoldcf.crawler.connectors.confluence.model.MutablePage;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.Page;
+import org.apache.manifoldcf.crawler.connectors.confluence.model.builder.ConfluenceResourceBuilder;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Optional;
+import com.google.common.collect.Lists;
 
 /**
  * <p>
@@ -45,6 +51,7 @@ public class ConfluenceClient {
 	private static final String CONTENT_PATH = "/rest/api/content";
 	private static final String EXPANDABLE_PARAMETERS = "expand=body.view,metadata.labels,space,history,version";
 	private static final String CHILD_ATTACHMENTS_PATH = "/child/attachment/";
+	private static final String LABEL_PATH = "/label";
 
 	private Logger logger = LoggerFactory.getLogger(ConfluenceClient.class);
 
@@ -168,7 +175,7 @@ public class ConfluenceClient {
 	 *         some pagination values
 	 * @throws Exception
 	 */
-	public ConfluenceResponse getPages() throws Exception {
+	public ConfluenceResponse<Page> getPages() throws Exception {
 		return getPages(0, 50, Optional.<String> absent());
 	}
 
@@ -183,30 +190,32 @@ public class ConfluenceClient {
 	 *         some pagination values
 	 * @throws Exception
 	 */
-	public ConfluenceResponse getPages(int start, int limit,
+	@SuppressWarnings("unchecked")
+	public ConfluenceResponse<Page> getPages(int start, int limit,
 			Optional<String> space) throws Exception {
 		String url = String.format("%s://%s:%s/%s/%s?limit=%s&start=%s", protocol,
 				host, port, path, CONTENT_PATH, limit, start);
 		if (space.isPresent()) {
 			url = String.format("%s&spaceKey=%s", url, space.get());
 		}
-		return getRealPages(url);
+		return (ConfluenceResponse<Page>) getConfluenceResources(url, Page.builder());
 	}
 
 	/**
-	 * <p>Get the pages from the given url</p>
-	 * @param url The url identifying the REST resource to get the pages
+	 * <p>Get the {@code ConfluenceResources} from the given url</p>
+	 * @param url The url identifying the REST resource to get the documents
+	 * @param builder The builder used to build the resources contained in the response
 	 * @return a {@code ConfluenceResponse} containing the page results
 	 * @throws Exception
 	 */
-	private ConfluenceResponse getRealPages(String url) throws Exception {
-		logger.debug("[Processing] Hitting url for document actions: {}", sanitizeUrl(url));
+	private ConfluenceResponse<? extends ConfluenceResource> getConfluenceResources(String url, ConfluenceResourceBuilder<? extends ConfluenceResource> builder) throws Exception {
+		logger.debug("[Processing] Hitting url for get confluence resources: {}", sanitizeUrl(url));
 
 		try {
 			HttpGet httpGet = createGetRequest(url);
 			HttpResponse response = executeRequest(httpGet);
-			ConfluenceResponse confluenceResponse = responseFromHttpEntity(response
-					.getEntity());
+			ConfluenceResponse<? extends ConfluenceResource> confluenceResponse = responseFromHttpEntity(response
+					.getEntity(), builder);
 			EntityUtils.consume(response.getEntity());
 			return confluenceResponse;
 		} catch (IOException e) {
@@ -221,15 +230,15 @@ public class ConfluenceClient {
 	 * @return a {@code ConfluenceResponse} with the requested information
 	 * @throws Exception
 	 */
-	private ConfluenceResponse responseFromHttpEntity(HttpEntity entity)
+	private <T extends ConfluenceResource> ConfluenceResponse<T> responseFromHttpEntity(HttpEntity entity, ConfluenceResourceBuilder<T> builder)
 			throws Exception {
 		String stringEntity = EntityUtils.toString(entity);
 
 		JSONObject responseObject;
 		try {
 			responseObject = new JSONObject(stringEntity);
-			ConfluenceResponse response = ConfluenceResponse
-					.fromJson(responseObject);
+			ConfluenceResponse<T> response = ConfluenceResponse
+					.fromJson(responseObject, builder);
 			if (response.getResults().size() == 0) {
 				logger.warn("[Processing] No pages found in the Confluence response");
 			}
@@ -248,7 +257,7 @@ public class ConfluenceClient {
 	 * @return a {@code ConfluenceResponse} instance containing the attachment results and some pagination values</p>
 	 * @throws Exception
 	 */
-	public ConfluenceResponse getPageAttachments(String pageId)
+	public ConfluenceResponse<Attachment> getPageAttachments(String pageId)
 			throws Exception {
 		return getPageAttachments(pageId, 0, 50);
 	}
@@ -261,12 +270,14 @@ public class ConfluenceClient {
 	 * @return a {@code ConfluenceResponse} instance containing the attachment results and some pagination values</p>
 	 * @throws Exception
 	 */
-	public ConfluenceResponse getPageAttachments(String pageId, int start,
+	public ConfluenceResponse<Attachment> getPageAttachments(String pageId, int start,
 			int limit) throws Exception {
 		String url = String.format("%s://%s:%s/%s/%s/%s%s?limit=%s&start=%s",
 				protocol, host, port, path, CONTENT_PATH, pageId, CHILD_ATTACHMENTS_PATH,
 				limit, start);
-		return getRealPages(url);
+		@SuppressWarnings("unchecked")
+		ConfluenceResponse<Attachment> confluenceResources = (ConfluenceResponse<Attachment>) getConfluenceResources(url, Attachment.builder());
+		return confluenceResources;
 	}
 	
 	/**
@@ -357,8 +368,10 @@ public class ConfluenceClient {
 			HttpGet httpGet = createGetRequest(url);
 			HttpResponse response = executeRequest(httpGet);
 			HttpEntity entity = response.getEntity();
-			Page page = pageFromHttpEntity(entity);
+			MutablePage page = pageFromHttpEntity(entity);
 			EntityUtils.consume(entity);
+			List<Label> labels = getLabels(pageId);
+			page.setLabels(labels);
 			return page;
 		} catch (Exception e) {
 			logger.error("[Processing] Failed to get page {0}. Error: {1}",
@@ -368,6 +381,39 @@ public class ConfluenceClient {
 		return new Page();
 	}
 
+	/**
+	 * <p>Get the labels of a specific page</p> 
+	 * @param pageId The pageId to get the labels
+	 * @return a {@code List<Label>} of labels
+	 */
+	public List<Label> getLabels(String pageId) {
+				
+		List<Label> labels = Lists.newArrayList();
+		int lastStart = 0;
+		int limit = 50;
+		boolean isLast = false;
+		do {
+			String url = String
+					.format("%s://%s:%s/%s/%s/%s/%s?start=%s&limit=%s",
+							protocol, host, port, path, CONTENT_PATH, pageId, LABEL_PATH, lastStart, limit);
+			url = sanitizeUrl(url);
+			logger.debug(
+					"[Processing] Hitting url for getting page labels : {}",
+					url);
+			try {
+				ConfluenceResponse<Label> response = (ConfluenceResponse<Label>) getConfluenceResources(url, Label.builder());
+				labels.addAll(response.getResults());
+				lastStart += response.getResults().size();
+				isLast = response.isLast();
+			} catch (Exception e) {
+				logger.debug("Error getting labels for page {}. Reason: {}", pageId, e.getMessage());
+			}
+		}
+		while(!isLast);
+		
+		return labels;
+	}
+	
 	/**
 	 * <p>Execute the given {@code HttpUriRequest} using the configured client</p> 
 	 * @param request the {@code HttpUriRequest} to be executed
@@ -399,18 +445,18 @@ public class ConfluenceClient {
 
 	/**
 	 * <p>Creates a Confluence page object from the given entity returned by the server</p>
-	 * @param entity the {@code HttpEntity} to create the {@code Page} from
+	 * @param entity the {@code HttpEntity} to create the {@code MutablePage} from
 	 * @return the Confluence page instance
 	 * @throws Exception
 	 */
-	private Page pageFromHttpEntity(HttpEntity entity) throws Exception {
+	private MutablePage pageFromHttpEntity(HttpEntity entity) throws Exception {
 		String stringEntity = EntityUtils.toString(entity);
 
 		JSONObject responseObject;
 		try {
 			responseObject = new JSONObject(stringEntity);
-			Page response = Page.builder().fromJson(responseObject);
-
+			@SuppressWarnings("unchecked")
+			MutablePage response = ((ConfluenceResourceBuilder<MutablePage>)MutablePage.builder()).fromJson(responseObject, new MutablePage());
 			return response;
 		} catch (JSONException e) {
 			logger.debug("Error parsing JSON page response data");
