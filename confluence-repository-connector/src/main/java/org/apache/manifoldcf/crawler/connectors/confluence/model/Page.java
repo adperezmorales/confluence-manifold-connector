@@ -1,5 +1,8 @@
 package org.apache.manifoldcf.crawler.connectors.confluence.model;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
@@ -21,61 +24,64 @@ import com.google.common.collect.Maps;
  */
 public class Page {
 
-	private static final String KEY_LINKS = "_links";
-	private static final String KEY_ID = "id";
-	private static final String KEY_SELF = "self";
-	private static final String KEY_WEBUI = "webui";
-	private static final String KEY_BASE = "base";
-	private static final String KEY_KEY = "key";
-	private static final String KEY_TITLE = "title";
-	private static final String KEY_BODY = "body";
-	private static final String KEY_VIEW = "view";
-	private static final String KEY_VALUE = "value";
-	private static final String KEY_SPACE = "space";
-	private static final String KEY_HISTORY = "history";
-	private static final String KEY_CREATED_DATE = "createdDate";
-	private static final String KEY_CREATED_BY = "createdBy";
-	private static final String KEY_BY = "by";
-	private static final String KEY_TYPE = "type";
-	private static final String KEY_DISPLAY_NAME = "displayName";
-	private static final String KEY_USER_NAME = "username";
-	private static final String KEY_VERSION = "version";
-	private static final String KEY_WHEN = "when";
-	
+	protected static final String KEY_LINKS = "_links";
+	protected static final String KEY_ID = "id";
+	protected static final String KEY_SELF = "self";
+	protected static final String KEY_WEBUI = "webui";
+	protected static final String KEY_BASE = "base";
+	protected static final String KEY_CONTEXT = "context";
+	protected static final String KEY_KEY = "key";
+	protected static final String KEY_TITLE = "title";
+	protected static final String KEY_BODY = "body";
+	protected static final String KEY_VIEW = "view";
+	protected static final String KEY_VALUE = "value";
+	protected static final String KEY_SPACE = "space";
+	protected static final String KEY_HISTORY = "history";
+	protected static final String KEY_CREATED_DATE = "createdDate";
+	protected static final String KEY_CREATED_BY = "createdBy";
+	protected static final String KEY_BY = "by";
+	protected static final String KEY_TYPE = "type";
+	protected static final String KEY_DISPLAY_NAME = "displayName";
+	protected static final String KEY_USER_NAME = "username";
+	protected static final String KEY_VERSION = "version";
+	protected static final String KEY_WHEN = "when";
+	protected static final String KEY_MEDIATYPE = "mediaType";
+
+	private static final String PAGE_ID = "confluenceId";
 	private static final String PAGE_URL = "url";
-	private static final String PAGE_WEBURL = "web_url";
+	private static final String PAGE_WEBURL = "webUrl";
 	private static final String PAGE_LAST_MODIFIED = "lastModified";
-	private static final String PAGE_MIMETYPE = "mimetype";
 	private static final String PAGE_CREATOR = "creator";
 	private static final String PAGE_CREATOR_USERNAME = "creatorUsername";
 	private static final String PAGE_LAST_MODIFIER = "lastModifier";
 	private static final String PAGE_LAST_MODIFIER_USERNAME = "lastModifierUsername";
+	private static final String PAGE_SIZE = "size";
 
-	private String id;
-	private String space;
-	private String url;
-	private String webUrl;
-	private Date createdDate;
-	private Date lastModified;
-	private String type;
-	private String title;
-	private int version;
-	private String creator;
-	private String creatorUsername;
-	private String lastModifier;
-	private String lastModifierUsername;
-	private String mimetype = "text/html";
+	protected String id;
+	protected String space;
+	protected String baseUrl;
+	protected String urlContext;
+	protected String url;
+	protected String webUrl;
+	protected Date createdDate;
+	protected Date lastModified;
+	protected PageType type;
+	protected String title;
+	protected int version;
+	protected String creator;
+	protected String creatorUsername;
+	protected String lastModifier;
+	protected String lastModifierUsername;
+	protected String mediaType = "text/html";
+	protected long length;
 
 	private String content;
-	
+
 	@SuppressWarnings("unused")
 	private JSONObject delegated;
-	
+
 	public Page() {
 
-	}
-
-	public Page(Map<String, String> properties) {
 	}
 
 	public String getContent() {
@@ -86,21 +92,30 @@ public class Page {
 		return this.id;
 	}
 
-	public String getType() {
+	public PageType getType() {
 		return this.type;
 	}
-	
-	public String getMimetype() {
-		return this.mimetype;
+
+	public String getMediaType() {
+		return this.mediaType;
 	}
-	
+
 	public int getVersion() {
 		return this.version;
 	}
-	
+
 	public String getTitle() {
 		return this.title;
 	}
+
+	public String getBaseUrl() {
+		return this.baseUrl;
+	}
+
+	public String getUrlContext() {
+		return this.urlContext;
+	}
+
 	public String getWebUrl() {
 		return this.webUrl;
 	}
@@ -137,117 +152,169 @@ public class Page {
 		return this.lastModified;
 	}
 
-	public Map<String,String> getMetadataAsMap() {
-		Map<String,String> pageMetadata = Maps.newHashMap();
-		pageMetadata.put(KEY_ID, this.id);
-		pageMetadata.put(KEY_TYPE, this.type);
+	public long getLength() {
+		return this.length;
+	}
+
+	public boolean hasContent() {
+		return this.length > 0 && this.content != null;
+	}
+	
+	public InputStream getContentStream() {
+		String contentStream = content != null ? content : "";
+		return new ByteArrayInputStream(
+				contentStream.getBytes(StandardCharsets.UTF_8));
+	}
+
+	public Map<String, String> getMetadataAsMap() {
+		Map<String, String> pageMetadata = Maps.newHashMap();
+		pageMetadata.put(PAGE_ID, this.id);
+		pageMetadata.put(KEY_TYPE, this.type.toString());
 		pageMetadata.put(KEY_TITLE, this.title);
 		pageMetadata.put(KEY_SPACE, this.space);
 		pageMetadata.put(PAGE_URL, this.url);
 		pageMetadata.put(PAGE_WEBURL, this.webUrl);
-		pageMetadata.put(KEY_CREATED_DATE, DateParser.formatISO8601Date(this.createdDate));
-		pageMetadata.put(PAGE_LAST_MODIFIED, DateParser.formatISO8601Date(this.lastModified));
-		pageMetadata.put(PAGE_MIMETYPE, this.mimetype);
+		pageMetadata.put(KEY_CREATED_DATE,
+				DateParser.formatISO8601Date(this.createdDate));
+		pageMetadata.put(PAGE_LAST_MODIFIED,
+				DateParser.formatISO8601Date(this.lastModified));
+		pageMetadata.put(KEY_MEDIATYPE, this.mediaType);
 		pageMetadata.put(KEY_VERSION, String.valueOf(this.version));
 		pageMetadata.put(PAGE_CREATOR, this.creator);
 		pageMetadata.put(PAGE_CREATOR_USERNAME, this.creatorUsername);
 		pageMetadata.put(PAGE_LAST_MODIFIER, this.lastModifier);
-		pageMetadata.put(PAGE_LAST_MODIFIER_USERNAME, this.lastModifierUsername);
-		
+		pageMetadata
+				.put(PAGE_LAST_MODIFIER_USERNAME, this.lastModifierUsername);
+		pageMetadata.put(PAGE_SIZE, String.valueOf(this.length));
+
+		refineMetadata(pageMetadata);
 		return pageMetadata;
 	}
-	
-	
-	public static Page fromJson(JSONObject page) {
-		try {
-			String id = page.getString(KEY_ID);
-			String type = page.getString(KEY_TYPE);
-			String title = page.getString(KEY_TITLE);
 
-			Page p = new Page();
-			p.delegated = page;
-
-			/* Init Page fields */
-			p.id = id;
-			p.type = type;
-			p.title = title;
-
-			p.space = processSpace(page);
-
-			/*
-			 * Url & WebUrl
-			 */
-			JSONObject links = (JSONObject) page.get(KEY_LINKS);
-			if (links != null) {
-				p.url = links.optString(KEY_SELF, "");
-				String webUrl = (String) links.optString(KEY_WEBUI, "");
-				String base = (String) links.optString(KEY_BASE, "");
-				p.webUrl = base + webUrl;
-
-			}
-
-			/*
-			 * Created By and created Date
-			 */
-			JSONObject history = (JSONObject) page.optJSONObject(KEY_HISTORY);
-			if (history != null) {
-
-				p.createdDate = DateParser.parseISO8601Date(history.optString(
-						KEY_CREATED_DATE, ""));
-				JSONObject createdBy = (JSONObject) history.optJSONObject(KEY_CREATED_BY);
-				if (createdBy != null) {
-					p.creator = createdBy.optString(KEY_DISPLAY_NAME, "");
-					p.creatorUsername = createdBy.optString(KEY_USER_NAME, "");
-				}
-
-			}
-
-			/*
-			 * Last modifier and Last modified date
-			 */
-			JSONObject version = (JSONObject) page.optJSONObject(KEY_VERSION);
-			if (version != null) {
-				JSONObject by = version.getJSONObject(KEY_BY);
-				if (by != null) {
-					p.lastModifier = by.optString(KEY_DISPLAY_NAME);
-					p.lastModifierUsername = by.optString(KEY_USER_NAME, "");
-				}
-
-				p.lastModified = DateParser.parseISO8601Date(version.optString(
-						KEY_WHEN, ""));
-			}
-
-			/*
-			 * Page Content
-			 */
-			JSONObject body = (JSONObject) page.optJSONObject(KEY_BODY);
-			if (body != null) {
-				JSONObject view = (JSONObject) body.optJSONObject(KEY_VIEW);
-				if (view != null) {
-					p.content = view.optString(KEY_VALUE, null);
-				}
-			}
-
-			return p;
-
-		} catch (JSONException e) {
-			e.printStackTrace();
-		}
-
-		return new Page();
-
+	/**
+	 * <p>
+	 * Used to be overwritten by child classes to add more metadata to the map
+	 * </p>
+	 * 
+	 * @param metadata
+	 */
+	protected void refineMetadata(Map<String, String> metadata) {
 	}
 
-	private static String processSpace(JSONObject page) {
-		/* Page */
-		try {
-			JSONObject space = (JSONObject) page.get(KEY_SPACE);
-			if (space != null)
-			return space.optString(KEY_KEY, "");
+	public static PageBuilder builder() {
+		return new PageBuilder();
+	}
+
+	/**
+	 * <p>PageBuilder internal class</p>
+	 * <p>Used to build pages</p>
+	 * @author Antonio David Perez Morales <adperezmorales@gmail.com>
+	 *
+	 */
+	public static class PageBuilder {
+		
+		public Page fromJson(JSONObject jsonPage) {
+			return fromJson(jsonPage, new Page());
 		}
-		catch(JSONException e) {
+		
+		public Page fromJson(JSONObject jsonPage, Page page) {
+
+			try {
+				String id = jsonPage.getString(KEY_ID);
+				String type = jsonPage.getString(KEY_TYPE);
+				String title = jsonPage.getString(KEY_TITLE);
+
+				page.delegated = jsonPage;
+
+				/* Init Page fields */
+				page.id = id;
+				page.type = PageType.fromName(type);
+				page.title = title;
+
+				page.space = processSpace(jsonPage);
+
+				/*
+				 * Url & WebUrl
+				 */
+				JSONObject links = (JSONObject) jsonPage.get(KEY_LINKS);
+				if (links != null) {
+					page.url = links.optString(KEY_SELF, "");
+					String webUrl = (String) links.optString(KEY_WEBUI, "");
+					page.urlContext = (String) links.optString(KEY_CONTEXT, "");
+					page.baseUrl = (String) links.optString(KEY_BASE, "");
+					page.webUrl = page.baseUrl + page.urlContext + webUrl;
+
+				}
+
+				/*
+				 * Created By and created Date
+				 */
+				JSONObject history = (JSONObject) jsonPage
+						.optJSONObject(KEY_HISTORY);
+				if (history != null) {
+
+					page.createdDate = DateParser.parseISO8601Date(history
+							.optString(KEY_CREATED_DATE, ""));
+					JSONObject createdBy = (JSONObject) history
+							.optJSONObject(KEY_CREATED_BY);
+					if (createdBy != null) {
+						page.creator = createdBy
+								.optString(KEY_DISPLAY_NAME, "");
+						page.creatorUsername = createdBy.optString(
+								KEY_USER_NAME, "");
+					}
+
+				}
+
+				/*
+				 * Last modifier and Last modified date
+				 */
+				JSONObject version = (JSONObject) jsonPage
+						.optJSONObject(KEY_VERSION);
+				if (version != null) {
+					JSONObject by = version.getJSONObject(KEY_BY);
+					if (by != null) {
+						page.lastModifier = by.optString(KEY_DISPLAY_NAME);
+						page.lastModifierUsername = by.optString(KEY_USER_NAME,
+								"");
+					}
+
+					page.lastModified = DateParser.parseISO8601Date(version
+							.optString(KEY_WHEN, ""));
+				}
+
+				/*
+				 * Page Content
+				 */
+				JSONObject body = (JSONObject) jsonPage.optJSONObject(KEY_BODY);
+				if (body != null) {
+					JSONObject view = (JSONObject) body.optJSONObject(KEY_VIEW);
+					if (view != null) {
+						page.content = view.optString(KEY_VALUE, null);
+						page.length = page.content.getBytes().length;
+					}
+				}
+
+				return page;
+
+			} catch (JSONException e) {
+				e.printStackTrace();
+			}
+
+			return new Page();
+
+		}
+
+		private static String processSpace(JSONObject page) {
+			/* Page */
+			try {
+				JSONObject space = (JSONObject) page.get(KEY_SPACE);
+				if (space != null)
+					return space.optString(KEY_KEY, "");
+			} catch (JSONException e) {
+				return "";
+			}
 			return "";
 		}
-		return "";
 	}
 }
