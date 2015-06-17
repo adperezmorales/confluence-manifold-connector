@@ -4,12 +4,17 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.manifoldcf.core.common.DateParser;
+import org.apache.manifoldcf.crawler.connectors.confluence.model.builder.ConfluenceResourceBuilder;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 /**
@@ -22,7 +27,7 @@ import com.google.common.collect.Maps;
  * 
  * @author Antonio David Perez Morales <adperezmorales@gmail.com>
  */
-public class Page {
+public class Page extends ConfluenceResource{
 
 	protected static final String KEY_LINKS = "_links";
 	protected static final String KEY_ID = "id";
@@ -56,6 +61,7 @@ public class Page {
 	private static final String PAGE_LAST_MODIFIER = "lastModifier";
 	private static final String PAGE_LAST_MODIFIER_USERNAME = "lastModifierUsername";
 	private static final String PAGE_SIZE = "size";
+	private static final String PAGE_LABEL = "label";
 
 	protected String id;
 	protected String space;
@@ -74,8 +80,8 @@ public class Page {
 	protected String lastModifierUsername;
 	protected String mediaType = "text/html";
 	protected long length;
-
-	private String content;
+	protected String content;
+	protected List<Label> labels = Lists.newArrayList();
 
 	@SuppressWarnings("unused")
 	private JSONObject delegated;
@@ -166,8 +172,12 @@ public class Page {
 				contentStream.getBytes(StandardCharsets.UTF_8));
 	}
 
-	public Map<String, String> getMetadataAsMap() {
-		Map<String, String> pageMetadata = Maps.newHashMap();
+	public List<Label> getLabels() {
+		return this.labels;
+	}
+	
+	public Map<String, Object> getMetadataAsMap() {
+		Map<String, Object> pageMetadata = Maps.newHashMap();
 		pageMetadata.put(KEY_ID,  this.id);
 		pageMetadata.put(PAGE_ID, this.id);
 		pageMetadata.put(KEY_TYPE, this.type.toString());
@@ -187,9 +197,30 @@ public class Page {
 		pageMetadata
 				.put(PAGE_LAST_MODIFIER_USERNAME, this.lastModifierUsername);
 		pageMetadata.put(PAGE_SIZE, String.valueOf(this.length));
-
+		
+		putLabelsOnMetadataMap(pageMetadata);
 		refineMetadata(pageMetadata);
 		return pageMetadata;
+	}
+
+	/**
+	 * <p>Put the page labels on the metadata map</p>
+	 * @param pageMetadata
+	 */
+	private void putLabelsOnMetadataMap(Map<String, Object> pageMetadata) {
+		if(this.labels == null || this.labels.isEmpty()) {
+			return;
+		}
+		
+		Iterable<String> labelsString = Iterables.transform(this.labels, new Function<Label, String>() {
+			@Override
+			public String apply(Label input) {
+				return input.getName();
+			}
+		});
+		
+		pageMetadata.put(PAGE_LABEL, Lists.newArrayList(labelsString));
+		
 	}
 
 	/**
@@ -199,10 +230,10 @@ public class Page {
 	 * 
 	 * @param metadata
 	 */
-	protected void refineMetadata(Map<String, String> metadata) {
+	protected void refineMetadata(Map<String, Object> metadata) {
 	}
 
-	public static PageBuilder builder() {
+	public static ConfluenceResourceBuilder<? extends Page> builder() {
 		return new PageBuilder();
 	}
 
@@ -212,7 +243,7 @@ public class Page {
 	 * @author Antonio David Perez Morales <adperezmorales@gmail.com>
 	 *
 	 */
-	public static class PageBuilder {
+	public static class PageBuilder implements ConfluenceResourceBuilder<Page>{
 		
 		public Page fromJson(JSONObject jsonPage) {
 			return fromJson(jsonPage, new Page());

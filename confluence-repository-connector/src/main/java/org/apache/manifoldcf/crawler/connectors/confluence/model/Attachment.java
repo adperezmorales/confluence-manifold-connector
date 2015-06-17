@@ -3,6 +3,7 @@ package org.apache.manifoldcf.crawler.connectors.confluence.model;
 import java.io.InputStream;
 import java.util.Map;
 
+import org.apache.manifoldcf.crawler.connectors.confluence.model.builder.ConfluenceResourceBuilder;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -23,7 +24,7 @@ public class Attachment extends Page {
 	protected String downloadUrl;
 	protected InputStream contentStream;
 
-	public static AttachmentBuilder builder() {
+	public static ConfluenceResourceBuilder<Attachment> builder() {
 		return new AttachmentBuilder();
 	}
 
@@ -49,7 +50,7 @@ public class Attachment extends Page {
 	}
 
 	@Override
-	protected void refineMetadata(Map<String, String> metadata) {
+	protected void refineMetadata(Map<String, Object> metadata) {
 		super.refineMetadata(metadata);
 		metadata.put("downloadUrl", this.getBaseUrl() + this.getUrlContext()
 				+ downloadUrl);
@@ -66,15 +67,16 @@ public class Attachment extends Page {
 	 * @author Antonio David Perez Morales <adperezmorales@gmail.com>
 	 *
 	 */
-	public static class AttachmentBuilder extends Page.PageBuilder {
+	public static class AttachmentBuilder implements ConfluenceResourceBuilder<Attachment>{
 		
 		@Override
 		public Attachment fromJson(JSONObject jsonPage) {
 			return fromJson(jsonPage, new Attachment());
 		}
 
+		@SuppressWarnings("unchecked")
 		public Attachment fromJson(JSONObject jsonPage, Attachment attachment) {
-			super.fromJson(jsonPage, attachment);
+			((ConfluenceResourceBuilder<Page>) Page.builder()).fromJson(jsonPage, attachment);
 
 			try {
 				/*
