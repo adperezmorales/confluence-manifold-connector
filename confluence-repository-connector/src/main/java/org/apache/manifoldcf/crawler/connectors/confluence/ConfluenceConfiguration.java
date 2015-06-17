@@ -24,7 +24,7 @@ public class ConfluenceConfiguration {
 		public static final String PROTOCOL_DEFAULT_VALUE = "http";
 		public static final String HOST_DEFAULT_VALUE = "";
 		public static final String PORT_DEFAULT_VALUE = "8090";
-		public static final String PATH_DEFAULT_VALUE = "/confluence/rest/api/content/";
+		public static final String PATH_DEFAULT_VALUE = "/confluence";
 		public static final String USERNAME_DEFAULT_VALUE = "";
 		public static final String PASSWORD_DEFAULT_VALUE = "";
 	}

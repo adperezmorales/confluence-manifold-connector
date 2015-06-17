@@ -168,6 +168,7 @@ public class Page {
 
 	public Map<String, String> getMetadataAsMap() {
 		Map<String, String> pageMetadata = Maps.newHashMap();
+		pageMetadata.put(KEY_ID,  this.id);
 		pageMetadata.put(PAGE_ID, this.id);
 		pageMetadata.put(KEY_TYPE, this.type.toString());
 		pageMetadata.put(KEY_TITLE, this.title);

@@ -246,11 +246,11 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 				Logging.connectors.debug("Confluence port = '" + port + "'");
 			}
 
-			if (StringUtils.isEmpty(path)) {
-				throw new ManifoldCFException("Parameter "
-						+ ConfluenceConfiguration.Server.PATH
-						+ " required but not set");
-			}
+//			if (StringUtils.isEmpty(path)) {
+//				throw new ManifoldCFException("Parameter "
+//						+ ConfluenceConfiguration.Server.PATH
+//						+ " required but not set");
+//			}
 
 			if (Logging.connectors.isDebugEnabled()) {
 				Logging.connectors.debug("Confluence path = '" + path + "'");

@@ -17,12 +17,12 @@ function checkConfig()
     return false;
   }
 
-  if (editconnection.confluence_path.value != "" && !(editconnection.confluence_path.value.indexOf("/") == 0))
-  {
-    alert("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.PathMustBeginWithASlash'))");
-    editconnection.confluence_path.focus();
-    return false;
-  }
+//  if (editconnection.confluence_path.value != "" && !(editconnection.confluence_path.value.indexOf("/") == 0))
+//  {
+//    alert("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.PathMustBeginWithASlash'))");
+//    editconnection.confluence_path.focus();
+//    return false;
+//  }
 
   return true;
 }
@@ -54,21 +54,21 @@ function checkConfigForSave()
     return false;
   }
 
-  if (editconnection.confluence_path.value == "")
-  {
-    alert("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.PathMustNotBeNull'))");
-    SelectTab("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Server'))");
-    editconnection.confluence_path.focus();
-    return false;
-  }
-  
-  if (editconnection.confluence_path.value != "" && !(editconnection.confluence_path.value.indexOf("/") == 0))
-  {
-    alert("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.PathMustBeginWithASlash'))");
-    SelectTab("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Server'))");
-    editconnection.confluence_path.focus();
-    return false;
-  }
+//  if (editconnection.confluence_path.value == "")
+//  {
+//    alert("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.PathMustNotBeNull'))");
+//    SelectTab("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Server'))");
+//    editconnection.confluence_path.focus();
+//    return false;
+//  }
+//  
+//  if (editconnection.confluence_path.value != "" && !(editconnection.confluence_path.value.indexOf("/") == 0))
+//  {
+//    alert("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.PathMustBeginWithASlash'))");
+//    SelectTab("$Encoder.bodyJavascriptEscape($ResourceBundle.getString('ConfluenceRepositoryConnector.Server'))");
+//    editconnection.confluence_path.focus();
+//    return false;
+//  }
   
   return true;
 }
