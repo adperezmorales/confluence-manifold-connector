@@ -1,10 +1,7 @@
 package org.apache.manifoldcf.crawler.connectors.confluence;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InterruptedIOException;
-import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.MessageFormat;
 import java.util.Date;
@@ -27,8 +24,10 @@ import org.apache.manifoldcf.core.interfaces.Specification;
 import org.apache.manifoldcf.core.interfaces.SpecificationNode;
 import org.apache.manifoldcf.crawler.connectors.BaseRepositoryConnector;
 import org.apache.manifoldcf.crawler.connectors.confluence.client.ConfluenceClient;
+import org.apache.manifoldcf.crawler.connectors.confluence.model.Attachment;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.ConfluenceResponse;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.Page;
+import org.apache.manifoldcf.crawler.connectors.confluence.util.ConfluenceUtil;
 import org.apache.manifoldcf.crawler.interfaces.IExistingVersions;
 import org.apache.manifoldcf.crawler.interfaces.IProcessActivity;
 import org.apache.manifoldcf.crawler.interfaces.ISeedingActivity;
@@ -38,6 +37,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * <p>
@@ -492,11 +492,10 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * @param ds
 	 */
 	private void fillInConfSpacesSpecificationMap(Map<String, Object> newMap,
-			Specification ds) {
-		List<String> spaceKeysList = this.getSpacesFromSpecification(ds);
+			ConfluenceSpecification cs) {
 
 		newMap.put(ConfluenceConfiguration.Specification.SPACES.toUpperCase(),
-				spaceKeysList);
+				cs.getSpaces());
 	}
 
 	/**
@@ -508,23 +507,11 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * @param ds
 	 */
 	private void fillInConfPagesSpecificationMap(Map<String, Object> newMap,
-			Specification ds) {
-		
-		Boolean procAttachments = false;
-		for (int i = 0, len = ds.getChildCount(); i < len; i++) {
-			SpecificationNode sn = ds.getChild(i);
-			if (sn.getType()
-					.equals(ConfluenceConfiguration.Specification.PAGES)) {
-				String processAttachments = sn
-						.getAttributeValue(ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY);
-				procAttachments = Boolean.valueOf(processAttachments);
-				break;
-			}
-		}
-		
+			ConfluenceSpecification cs) {
+
 		newMap.put(
 				ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY
-						.toUpperCase(), procAttachments);
+						.toUpperCase(), cs.isProcessAttachments());
 		return;
 
 	}
@@ -537,8 +524,10 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		Map<String, Object> paramMap = new HashMap<String, Object>();
 		paramMap.put("SeqNum", Integer.toString(connectionSequenceNumber));
 
-		fillInConfSpacesSpecificationMap(paramMap, ds);
-		fillInConfPagesSpecificationMap(paramMap, ds);
+		ConfluenceSpecification cs = ConfluenceSpecification.from(ds);
+
+		fillInConfSpacesSpecificationMap(paramMap, cs);
+		fillInConfPagesSpecificationMap(paramMap, cs);
 
 		Messages.outputResourceWithVelocity(out, locale, VIEW_SPEC_FORWARD,
 				paramMap);
@@ -660,11 +649,13 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		paramMap.put("SeqNum", Integer.toString(connectionSequenceNumber));
 		paramMap.put("SelectedNum", Integer.toString(actualSequenceNumber));
 
-		fillInConfSpacesSpecificationMap(paramMap, ds);
-		fillInConfPagesSpecificationMap(paramMap, ds);
+		ConfluenceSpecification cs = ConfluenceSpecification.from(ds);
+
+		fillInConfSpacesSpecificationMap(paramMap, cs);
+		fillInConfPagesSpecificationMap(paramMap, cs);
 		Messages.outputResourceWithVelocity(out, locale,
 				EDIT_SPEC_FORWARD_SPACES, paramMap);
-		
+
 		Messages.outputResourceWithVelocity(out, locale,
 				EDIT_SPEC_FORWARD_CONF_PAGES, paramMap);
 	}
@@ -726,18 +717,21 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			// lastStart = new Long(lastSeedVersion);
 			// }
 
-			List<String> spaceKeys = this.getSpacesFromSpecification(spec);
+			ConfluenceSpecification confluenceSpecification = ConfluenceSpecification
+					.from(spec);
+			List<String> spaceKeys = confluenceSpecification.getSpaces();
 
 			if (spaceKeys.isEmpty()) {
 				logger.info("No spaces configured. Processing all spaces");
 				addSeedDocumentsForSpace(Optional.<String> absent(),
-						activities, spec, lastSeedVersion, seedTime, jobMode);
+						activities, confluenceSpecification, lastSeedVersion,
+						seedTime, jobMode);
 			} else {
 				for (String space : spaceKeys) {
 					logger.info("Processing configured space {}", space);
 					addSeedDocumentsForSpace(Optional.<String> of(space),
-							activities, spec, lastSeedVersion, seedTime,
-							jobMode);
+							activities, confluenceSpecification,
+							lastSeedVersion, seedTime, jobMode);
 				}
 			}
 
@@ -757,9 +751,10 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * @throws ManifoldCFException
 	 */
 	private void addSeedDocumentsForSpace(Optional<String> space,
-			ISeedingActivity activities, Specification spec,
-			String lastSeedVersion, long seedTime, int jobMode)
-			throws ManifoldCFException, ServiceInterruption {
+			ISeedingActivity activities,
+			ConfluenceSpecification confluenceSpec, String lastSeedVersion,
+			long seedTime, int jobMode) throws ManifoldCFException,
+			ServiceInterruption {
 
 		long lastStart = 0;
 		long defaultSize = 50;
@@ -780,7 +775,11 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 
 				int count = 0;
 				for (Page page : response.getResults()) {
+
 					activities.addSeedDocument(page.getId());
+					if (confluenceSpec.isProcessAttachments()) {
+						processSeedAttachments(page, activities);
+					}
 					count++;
 				}
 				if (Logging.connectors != null
@@ -806,32 +805,60 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 
 	/**
 	 * <p>
-	 * Get list of configured spaces from Specification
+	 * Process seed attachments for the given page
 	 * </p>
 	 * 
-	 * @param spec
-	 * @return a {@code List} of spaces
+	 * @param page
+	 * @param activities
 	 */
-	private List<String> getSpacesFromSpecification(Specification spec) {
-		List<String> spaceKeysList = Lists.newArrayList();
-		for (int i = 0, len = spec.getChildCount(); i < len; i++) {
-			SpecificationNode sn = spec.getChild(i);
-			if (sn.getType().equals(
-					ConfluenceConfiguration.Specification.SPACES)) {
-				for (int j = 0, sLen = sn.getChildCount(); j < sLen; j++) {
-					SpecificationNode specNode = sn.getChild(j);
-					if (specNode.getType().equals(
-							ConfluenceConfiguration.Specification.SPACE)) {
-						spaceKeysList
-								.add(specNode
-										.getAttributeValue(ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE));
+	private void processSeedAttachments(Page page, ISeedingActivity activities)
+			throws ManifoldCFException, ServiceInterruption {
+		long lastStart = 0;
+		long defaultSize = 50;
 
-					}
+		if (Logging.connectors != null && Logging.connectors.isDebugEnabled()) {
+			Logging.connectors
+					.debug(MessageFormat
+							.format("Processing page {0} attachments starting from {1} and size {2}",
+									new Object[] { page.getId(), lastStart,
+											defaultSize }));
+		}
+
+		try {
+			Boolean isLast = true;
+			do {
+				final ConfluenceResponse response = confluenceClient
+						.getPageAttachments(page.getId(), (int) lastStart,
+								(int) defaultSize);
+
+				int count = 0;
+				for (Page resultPage : response.getResults()) {
+					activities.addSeedDocument(ConfluenceUtil
+							.generateRepositoryDocumentIdentifier(
+									resultPage.getId(), page.getId()));
+					count++;
 				}
 
-			}
+				if (Logging.connectors != null
+						&& Logging.connectors.isDebugEnabled())
+					Logging.connectors
+							.debug(MessageFormat
+									.format("Fetched and added {0} seed document attachments for page {1}",
+											new Object[] { new Integer(count),
+													page.getId() }));
+
+				lastStart += count;
+				isLast = response.isLast();
+				if (Logging.connectors != null
+						&& Logging.connectors.isDebugEnabled())
+					Logging.connectors.debug(MessageFormat.format(
+							"New start {0} and size {1}", new Object[] {
+									lastStart, defaultSize }));
+			} while (!isLast);
+
+		} catch (Exception e) {
+			handleConfluenceDownException(e, "seeding");
 		}
-		return spaceKeysList;
 	}
 
 	protected static void handleConfluenceDownException(Exception e,
@@ -872,7 +899,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			long startTime = System.currentTimeMillis();
 			String errorCode = "FAILED";
 			String errorDesc = StringUtils.EMPTY;
-			Long fileSize = null;
+			Long fileSize = (long) 0;
 			boolean doLog = true;
 
 			try {
@@ -887,88 +914,171 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 					initConfluenceClient();
 				}
 
-				Page page = confluenceClient.getPage(pageId);
-
-				/* Remove page if content is null */
-				/* Content is null if there was an error trying to get the page */
-				if (page.getContent() == null) {
-					activities.deleteDocument(pageId);
-					continue;
+				if (ConfluenceUtil.isAttachment(pageId)) {
+					fileSize = processPageAsAttachment(pageId, version,
+							activities, doLog);
 				}
-				if (Logging.connectors.isDebugEnabled()) {
-					Logging.connectors
-							.debug("Confluence: This content exists: "
-									+ page.getId());
-				}
-				RepositoryDocument rd = new RepositoryDocument();
-				Date createdDate = page.getCreatedDate();
-				Date lastModified = page.getLastModifiedDate();
-				DateFormat df = DateFormat.getDateTimeInstance();
-
-				/*
-				 * Retain page in Manifold because it has not changed from last
-				 * time This is needed to keep the identifier in Manifold data,
-				 * because by default if a document is not retained nor
-				 * ingested, it will be deleted by the framework
-				 */
-				if (version != null && version.equals(df.format(lastModified))) {
-					activities.retainAllComponentDocument(pageId);
-					continue;
+				else {
+					fileSize = processPage(pageId, version, activities, doLog,
+							Maps.<String, String> newHashMap());
 				}
 
-				/* Add repository document information */
-				rd.setMimeType(page.getMimetype());
-				if (createdDate != null)
-					rd.setCreatedDate(createdDate);
-				if (lastModified != null)
-					rd.setModifiedDate(lastModified);
-				rd.setIndexingDate(new Date());
+				errorCode = "OK";
 
-				/* Adding Page Metadata */
-				Map<String, String> pageMetadata = page.getMetadataAsMap();
-				for (Entry<String, String> entry : pageMetadata.entrySet()) {
-					rd.addField(entry.getKey(), entry.getValue());
-				}
+			} catch (IOException ioe) {
+				handleIOException(ioe);
+			} catch (Exception e) {
+				handleException(e);
+			}
 
-				String documentURI = page.getWebUrl();
-				String content = page.getContent();
-
-				/* Set repository document ACLs */
-				rd.setSecurityACL(RepositoryDocument.SECURITY_TYPE_DOCUMENT,
-						new String[] { page.getSpace() });
-				rd.setSecurityDenyACL(
-						RepositoryDocument.SECURITY_TYPE_DOCUMENT,
-						new String[] { defaultAuthorityDenyToken });
-
-				try {
-					byte[] documentBytes = content
-							.getBytes(StandardCharsets.UTF_8);
-					InputStream is = new ByteArrayInputStream(documentBytes);
-					try {
-						rd.setBinary(is, documentBytes.length);
-						rd.addField("size",
-								String.valueOf(documentBytes.length));
-
-						/* Ingest document */
-						activities.ingestDocumentWithException(pageId,
-								df.format(lastModified), documentURI, rd);
-						/* No errors */
-						errorCode = "OK";
-						fileSize = new Long(documentBytes.length);
-					} finally {
-						is.close();
-					}
-				} catch (IOException e) {
-					handleIOException(e);
-				}
-
-			} finally {
+			finally {
 				if (doLog)
 					activities.recordActivity(new Long(startTime),
 							ACTIVITY_READ, fileSize, pageId, errorCode,
 							errorDesc, null);
 			}
+
 		}
+	}
+
+	/**
+	 * <p>
+	 * Process the specific page
+	 * </p>
+	 * 
+	 * @param pageId
+	 *            The pageId being an attachment
+	 * @param version
+	 *            The version of the page
+	 * @param activities
+	 * @param doLog
+	 * @throws ManifoldCFException
+	 * @throws IOException
+	 * @throws ServiceInterruption
+	 */
+	private long processPage(String pageId, String version,
+			IProcessActivity activities, boolean doLog,
+			Map<String, String> extraProperties) throws ManifoldCFException,
+			ServiceInterruption, IOException {
+		Page page = confluenceClient.getPage(pageId);
+		processPageInternal(page, pageId, version, activities, doLog,
+				extraProperties);
+		return page.getLength();
+	}
+
+	/**
+	 * <p>
+	 * Process the specific attachment
+	 * </p>
+	 * 
+	 * @param pageId
+	 *            The pageId being an attachment
+	 * @param version
+	 *            The version of the page
+	 * @param activities
+	 * @param doLog
+	 * @throws IOException
+	 * @throws ServiceInterruption
+	 */
+	private long processPageAsAttachment(String pageId, String version,
+			IProcessActivity activities, boolean doLog)
+			throws ManifoldCFException, ServiceInterruption, IOException {
+
+		String[] ids = ConfluenceUtil.getAttachmentAndPageId(pageId);
+		Attachment attachment = confluenceClient.getAttachment(ids[0]);
+		Map<String, String> extraProperties = Maps.newHashMap();
+		extraProperties.put("attachedBy", ids[1]);
+		processPageInternal(attachment, pageId, version, activities, doLog,
+				extraProperties);
+		return attachment.getLength();
+	}
+
+	/**
+	 * <p>
+	 * Process the specific page
+	 * </p>
+	 * 
+	 * @param pageId
+	 *            The pageId being an attachment
+	 * @param manifoldDocumentIdentifier
+	 * @param version
+	 *            The version of the page
+	 * @param activities
+	 * @param doLog
+	 * @throws ManifoldCFException
+	 * @throws IOException
+	 * @throws ServiceInterruption
+	 */
+	private void processPageInternal(Page page,
+			String manifoldDocumentIdentifier, String version,
+			IProcessActivity activities, boolean doLog,
+			Map<String, String> extraProperties) throws ManifoldCFException,
+			ServiceInterruption, IOException {
+
+		/* Remove page if it has no content */
+		/*
+		 * Page does not have content if there was an error trying to get the
+		 * page
+		 */
+		if (!page.hasContent()) {
+			activities.deleteDocument(page.getId());
+			return;
+		}
+		if (Logging.connectors.isDebugEnabled()) {
+			Logging.connectors.debug("Confluence: This content exists: "
+					+ page.getId());
+		}
+
+		RepositoryDocument rd = new RepositoryDocument();
+		Date createdDate = page.getCreatedDate();
+		Date lastModified = page.getLastModifiedDate();
+		DateFormat df = DateFormat.getDateTimeInstance();
+
+		/*
+		 * Retain page in Manifold because it has not changed from last time
+		 * This is needed to keep the identifier in Manifold data, because by
+		 * default if a document is not retained nor ingested, it will be
+		 * deleted by the framework
+		 */
+		if (version != null && version.equals(df.format(lastModified))) {
+			activities.retainAllComponentDocument(page.getId());
+			return;
+		}
+
+		/* Add repository document information */
+		rd.setMimeType(page.getMediaType());
+		if (createdDate != null)
+			rd.setCreatedDate(createdDate);
+		if (lastModified != null)
+			rd.setModifiedDate(lastModified);
+		rd.setIndexingDate(new Date());
+
+		/* Adding Page Metadata */
+		Map<String, String> pageMetadata = page.getMetadataAsMap();
+		for (Entry<String, String> entry : pageMetadata.entrySet()) {
+			rd.addField(entry.getKey(), entry.getValue());
+		}
+
+		/* Adding extra properties */
+		for (Entry<String, String> entry : extraProperties.entrySet()) {
+			rd.addField(entry.getKey(), entry.getValue());
+		}
+
+		String documentURI = page.getWebUrl();
+
+		/* Set repository document ACLs */
+		rd.setSecurityACL(RepositoryDocument.SECURITY_TYPE_DOCUMENT,
+				new String[] { page.getSpace() });
+		rd.setSecurityDenyACL(RepositoryDocument.SECURITY_TYPE_DOCUMENT,
+				new String[] { defaultAuthorityDenyToken });
+
+		rd.setBinary(page.getContentStream(), page.getLength());
+		rd.addField("size", String.valueOf(page.getLength()));
+
+		/* Ingest document */
+		activities.ingestDocumentWithException(manifoldDocumentIdentifier,
+				df.format(lastModified), documentURI, rd);
+
 	}
 
 	/**
@@ -993,6 +1103,90 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		long currentTime = System.currentTimeMillis();
 		throw new ServiceInterruption("IO exception: " + e.getMessage(), e,
 				currentTime + 300000L, currentTime + 3 * 60 * 60000L, -1, false);
+	}
+
+	/**
+	 * <p>
+	 * Handles general exceptions
+	 * </p>
+	 * 
+	 * @param e
+	 *            The Exception
+	 * @throws ManifoldCFException
+	 */
+	private static void handleException(Exception e) throws ManifoldCFException {
+		Logging.connectors.warn("Exception: " + e.getMessage(), e);
+		throw new ManifoldCFException("Exception: " + e.getMessage(), e,
+				ManifoldCFException.REPOSITORY_CONNECTION_ERROR);
+
+	}
+
+	/**
+	 * <p>
+	 * Internal private class used to parse and keep the specification
+	 * configuration in object format
+	 * </p>
+	 * 
+	 * @author Antonio David Perez Morales <adperezmorales@gmail.com>
+	 *
+	 */
+	private static class ConfluenceSpecification {
+		private List<String> spaces;
+		private Boolean processAttachments = false;
+
+		/**
+		 * <p>
+		 * Returns if attachments should be processed
+		 * </p>
+		 * 
+		 * @return a {@code Boolean} indicating if the attachments should be
+		 *         processed or not
+		 */
+		public Boolean isProcessAttachments() {
+			return this.processAttachments;
+		}
+
+		/**
+		 * <p>
+		 * Returns the list of configured spaces or an empty list meaning that
+		 * all spaces should be processed
+		 * </p>
+		 * 
+		 * @return a {@code List<String>} of configured spaces
+		 */
+		public List<String> getSpaces() {
+			return this.spaces;
+		}
+
+		public static ConfluenceSpecification from(Specification spec) {
+			ConfluenceSpecification cs = new ConfluenceSpecification();
+			cs.spaces = Lists.newArrayList();
+			for (int i = 0, len = spec.getChildCount(); i < len; i++) {
+				SpecificationNode sn = spec.getChild(i);
+				if (sn.getType().equals(
+						ConfluenceConfiguration.Specification.SPACES)) {
+					for (int j = 0, sLen = sn.getChildCount(); j < sLen; j++) {
+						SpecificationNode specNode = sn.getChild(j);
+						if (specNode.getType().equals(
+								ConfluenceConfiguration.Specification.SPACE)) {
+							cs.spaces
+									.add(specNode
+											.getAttributeValue(ConfluenceConfiguration.Specification.SPACE_KEY_ATTRIBUTE));
+
+						}
+					}
+
+				} else if (sn.getType().equals(
+						ConfluenceConfiguration.Specification.PAGES)) {
+					String s = sn
+							.getAttributeValue(ConfluenceConfiguration.Specification.PROCESS_ATTACHMENTS_ATTRIBUTE_KEY);
+					cs.processAttachments = Boolean.valueOf(s);
+				}
+			}
+
+			return cs;
+
+		}
 	}
 
 }
