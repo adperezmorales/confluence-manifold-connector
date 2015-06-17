@@ -43,7 +43,7 @@ public class ConfluenceResponse {
 			JSONArray jsonArray = response.getJSONArray("results");
 			for(int i=0,size=jsonArray.length(); i<size;i++) {
 				JSONObject jsonPage = jsonArray.getJSONObject(i);
-				Page page = Page.fromJson(jsonPage);
+				Page page = Page.builder().fromJson(jsonPage);
 				pages.add(page);
 			}
 			
