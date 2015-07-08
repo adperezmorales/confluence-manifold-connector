@@ -10,6 +10,7 @@ import org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector;
 import org.apache.manifoldcf.authorities.interfaces.AuthorizationResponse;
 import org.apache.manifoldcf.core.interfaces.ConfigParams;
 import org.apache.manifoldcf.core.interfaces.IHTTPOutput;
+import org.apache.manifoldcf.core.interfaces.IPasswordMapperActivity;
 import org.apache.manifoldcf.core.interfaces.IPostParameters;
 import org.apache.manifoldcf.core.interfaces.IThreadContext;
 import org.apache.manifoldcf.core.interfaces.ManifoldCFException;
@@ -35,7 +36,7 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	private static final String PARAMETER_PREFIX = "confluence_";
 
 	/* Configuration tabs */
-	private static final String CONF_SERVER_TAB_PROPERTY = "ConfluenceRepositoryConnector.Server";
+	private static final String CONF_SERVER_TAB_PROPERTY = "ConfluenceAuthorityConnector.Server";
 
 	// pages & js
 	// Template names for Confluence configuration
@@ -53,7 +54,6 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	 */
 	private static final String VIEW_CONFIG_FORWARD = "viewConfiguration_conf.html";
 
-
 	private Logger logger = LoggerFactory
 			.getLogger(ConfluenceAuthorityConnector.class);
 
@@ -65,8 +65,6 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	public ConfluenceAuthorityConnector() {
 		super();
 	}
-
-	
 
 	/**
 	 * Close the connection. Call this before discarding the connection.
@@ -95,8 +93,6 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 		return super.check();
 	}
 
-	
-
 	/**
 	 * This method is called to assess whether to count this connector instance
 	 * should actually be counted as being connected.
@@ -108,12 +104,59 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 		return super.isConnected();
 	}
 
+	private void fillInServerConfigurationMap(Map<String, String> serverMap,
+			IPasswordMapperActivity mapper, ConfigParams parameters) {
+		String confluenceProtocol = parameters
+				.getParameter(ConfluenceConfiguration.Server.PROTOCOL);
+		String confluenceHost = parameters
+				.getParameter(ConfluenceConfiguration.Server.HOST);
+		String confluencePort = parameters
+				.getParameter(ConfluenceConfiguration.Server.PORT);
+		String confluencePath = parameters
+				.getParameter(ConfluenceConfiguration.Server.PATH);
+		String confluenceUsername = parameters
+				.getParameter(ConfluenceConfiguration.Server.USERNAME);
+		String confluencePassword = parameters
+				.getObfuscatedParameter(ConfluenceConfiguration.Server.PASSWORD);
+
+		if (confluenceProtocol == null)
+			confluenceProtocol = ConfluenceConfiguration.Server.PROTOCOL_DEFAULT_VALUE;
+		if (confluenceHost == null)
+			confluenceHost = ConfluenceConfiguration.Server.HOST_DEFAULT_VALUE;
+		if (confluencePort == null)
+			confluencePort = ConfluenceConfiguration.Server.PORT_DEFAULT_VALUE;
+		if (confluencePath == null)
+			confluencePath = ConfluenceConfiguration.Server.PATH_DEFAULT_VALUE;
+
+		if (confluenceUsername == null)
+			confluenceUsername = ConfluenceConfiguration.Server.USERNAME_DEFAULT_VALUE;
+		if (confluencePassword == null)
+			confluencePassword = ConfluenceConfiguration.Server.PASSWORD_DEFAULT_VALUE;
+		else
+			confluencePassword = mapper.mapPasswordToKey(confluencePassword);
+
+		serverMap.put(PARAMETER_PREFIX
+				+ ConfluenceConfiguration.Server.PROTOCOL, confluenceProtocol);
+		serverMap.put(PARAMETER_PREFIX + ConfluenceConfiguration.Server.HOST,
+				confluenceHost);
+		serverMap.put(PARAMETER_PREFIX + ConfluenceConfiguration.Server.PORT,
+				confluencePort);
+		serverMap.put(PARAMETER_PREFIX + ConfluenceConfiguration.Server.PATH,
+				confluencePath);
+		serverMap.put(PARAMETER_PREFIX
+				+ ConfluenceConfiguration.Server.USERNAME, confluenceUsername);
+		serverMap.put(PARAMETER_PREFIX
+				+ ConfluenceConfiguration.Server.PASSWORD, confluencePassword);
+	}
 
 	@Override
 	public void viewConfiguration(IThreadContext threadContext,
 			IHTTPOutput out, Locale locale, ConfigParams parameters)
 			throws ManifoldCFException, IOException {
 		Map<String, String> paramMap = new HashMap<String, String>();
+
+		/* Fill server configuration parameters */
+		fillInServerConfigurationMap(paramMap, out, parameters);
 
 		Messages.outputResourceWithVelocity(out, locale, VIEW_CONFIG_FORWARD,
 				paramMap, true);
@@ -127,6 +170,9 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 		tabsArray.add(Messages.getString(locale, CONF_SERVER_TAB_PROPERTY));
 		// Map the parameters
 		Map<String, String> paramMap = new HashMap<String, String>();
+
+		/* Fill server configuration parameters */
+		fillInServerConfigurationMap(paramMap, out, parameters);
 
 		// Output the Javascript - only one Velocity template for all tabs
 		Messages.outputResourceWithVelocity(out, locale,
@@ -142,6 +188,9 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 		Map<String, String> paramMap = new HashMap<String, String>();
 		// Set the tab name
 		paramMap.put("TabName", tabName);
+
+		// Fill in the parameters
+		fillInServerConfigurationMap(paramMap, out, parameters);
 
 		// Server tab
 		Messages.outputResourceWithVelocity(out, locale,
@@ -164,27 +213,73 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 			IPostParameters variableContext, ConfigParams parameters)
 			throws ManifoldCFException {
 
+		String confluenceProtocol = variableContext
+				.getParameter(PARAMETER_PREFIX
+						+ ConfluenceConfiguration.Server.PROTOCOL);
+		if (confluenceProtocol != null)
+			parameters.setParameter(ConfluenceConfiguration.Server.PROTOCOL,
+					confluenceProtocol);
+
+		String confluenceHost = variableContext.getParameter(PARAMETER_PREFIX
+				+ ConfluenceConfiguration.Server.HOST);
+		if (confluenceHost != null)
+			parameters.setParameter(ConfluenceConfiguration.Server.HOST,
+					confluenceHost);
+
+		String confluencePort = variableContext.getParameter(PARAMETER_PREFIX
+				+ ConfluenceConfiguration.Server.PORT);
+		if (confluencePort != null)
+			parameters.setParameter(ConfluenceConfiguration.Server.PORT,
+					confluencePort);
+
+		String confluencePath = variableContext.getParameter(PARAMETER_PREFIX
+				+ ConfluenceConfiguration.Server.PATH);
+		if (confluencePath != null)
+			parameters.setParameter(ConfluenceConfiguration.Server.PATH,
+					confluencePath);
+
+		String confluenceUsername = variableContext
+				.getParameter(PARAMETER_PREFIX
+						+ ConfluenceConfiguration.Server.USERNAME);
+		if (confluenceUsername != null)
+			parameters.setParameter(ConfluenceConfiguration.Server.USERNAME,
+					confluenceUsername);
+
+		String confluencePassword = variableContext
+				.getParameter(PARAMETER_PREFIX
+						+ ConfluenceConfiguration.Server.PASSWORD);
+		if (confluencePassword != null)
+			parameters.setObfuscatedParameter(
+					ConfluenceConfiguration.Server.PASSWORD,
+					variableContext.mapKeyToPassword(confluencePassword));
+
 		/* null means process configuration has been successful */
 		return null;
 	}
-	
-	  /*
-	   * (non-Javadoc)
-	   * @see org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#getDefaultAuthorizationResponse(java.lang.String)
-	   */
-	  @Override
-	  public AuthorizationResponse getDefaultAuthorizationResponse(String userName) {
-	    return RESPONSE_UNREACHABLE;
-	  }
 
-	  /*
-	   * (non-Javadoc)
-	   * @see org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#getAuthorizationResponse(java.lang.String)
-	   */
-	  @Override
-	  public AuthorizationResponse getAuthorizationResponse(String userName)
-	      throws ManifoldCFException {
-	     return super.getAuthorizationResponse(userName);
-	  }
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see
+	 * org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#
+	 * getDefaultAuthorizationResponse(java.lang.String)
+	 */
+	@Override
+	public AuthorizationResponse getDefaultAuthorizationResponse(String userName) {
+		return RESPONSE_UNREACHABLE;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see
+	 * org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#
+	 * getAuthorizationResponse(java.lang.String)
+	 */
+	@Override
+	public AuthorizationResponse getAuthorizationResponse(String userName)
+			throws ManifoldCFException {
+		return super.getAuthorizationResponse(userName);
+	}
 
 }
