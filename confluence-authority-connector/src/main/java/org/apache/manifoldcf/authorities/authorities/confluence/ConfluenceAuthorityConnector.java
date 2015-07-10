@@ -6,7 +6,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.apache.commons.lang.StringUtils;
+import org.apache.manifoldcf.agents.interfaces.ServiceInterruption;
 import org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector;
+import org.apache.manifoldcf.authorities.authorities.confluence.client.ConfluenceClient;
+import org.apache.manifoldcf.authorities.authorities.confluence.model.ConfluenceUser;
 import org.apache.manifoldcf.authorities.interfaces.AuthorizationResponse;
 import org.apache.manifoldcf.core.interfaces.ConfigParams;
 import org.apache.manifoldcf.core.interfaces.IHTTPOutput;
@@ -14,6 +18,7 @@ import org.apache.manifoldcf.core.interfaces.IPasswordMapperActivity;
 import org.apache.manifoldcf.core.interfaces.IPostParameters;
 import org.apache.manifoldcf.core.interfaces.IThreadContext;
 import org.apache.manifoldcf.core.interfaces.ManifoldCFException;
+import org.apache.manifoldcf.crawler.system.Logging;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,8 +59,19 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	 */
 	private static final String VIEW_CONFIG_FORWARD = "viewConfiguration_conf.html";
 
+
 	private Logger logger = LoggerFactory
 			.getLogger(ConfluenceAuthorityConnector.class);
+
+	/* Confluence instance parameters */
+	protected String protocol = null;
+	protected String host = null;
+	protected String port = null;
+	protected String path = null;
+	protected String username = null;
+	protected String password = null;
+
+	protected ConfluenceClient confluenceClient = null;
 
 	/**
 	 * <p>
@@ -66,12 +82,23 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 		super();
 	}
 
+	
+
 	/**
 	 * Close the connection. Call this before discarding the connection.
 	 */
 	@Override
 	public void disconnect() throws ManifoldCFException {
-		super.disconnect();
+		if (confluenceClient != null) {
+			confluenceClient = null;
+		}
+
+		protocol = null;
+		host = null;
+		port = null;
+		path = null;
+		username = null;
+		password = null;
 
 	}
 
@@ -83,6 +110,23 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	@Override
 	public void connect(ConfigParams configParams) {
 		super.connect(configParams);
+
+		protocol = params.getParameter(ConfluenceConfiguration.Server.PROTOCOL);
+		host = params.getParameter(ConfluenceConfiguration.Server.HOST);
+		port = params.getParameter(ConfluenceConfiguration.Server.PORT);
+		path = params.getParameter(ConfluenceConfiguration.Server.PATH);
+		username = params.getParameter(ConfluenceConfiguration.Server.USERNAME);
+		password = params
+				.getObfuscatedParameter(ConfluenceConfiguration.Server.PASSWORD);
+
+		try {
+			initConfluenceClient();
+		} catch (ManifoldCFException e) {
+			logger.debug(
+					"Not possible to initialize Confluence client. Reason: {}",
+					e.getMessage());
+			e.printStackTrace();
+		}
 	}
 
 	/**
@@ -90,7 +134,100 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	 */
 	@Override
 	public String check() throws ManifoldCFException {
-		return super.check();
+		try {
+			if (!isConnected()) {
+				initConfluenceClient();
+			}
+			Boolean result = confluenceClient.check();
+			if (result)
+				return super.check();
+			else
+				throw new ManifoldCFException(
+						"Confluence instance could not be reached");
+		} catch (ServiceInterruption e) {
+			return "Connection temporarily failed: " + e.getMessage();
+		} catch (ManifoldCFException e) {
+			return "Connection failed: " + e.getMessage();
+		} catch (Exception e) {
+			return "Connection failed: " + e.getMessage();
+		}
+	}
+
+	/**
+	 * <p>
+	 * Initialize Confluence client using the configured parameters
+	 * 
+	 * @throws ManifoldCFException
+	 */
+	protected void initConfluenceClient() throws ManifoldCFException {
+		if (confluenceClient == null) {
+
+			if (StringUtils.isEmpty(protocol)) {
+				throw new ManifoldCFException("Parameter "
+						+ ConfluenceConfiguration.Server.PROTOCOL
+						+ " required but not set");
+			}
+
+			if (Logging.connectors.isDebugEnabled()) {
+				Logging.connectors.debug("Confluence protocol = '" + protocol
+						+ "'");
+			}
+
+			if (StringUtils.isEmpty(host)) {
+				throw new ManifoldCFException("Parameter "
+						+ ConfluenceConfiguration.Server.HOST
+						+ " required but not set");
+			}
+
+			if (Logging.connectors.isDebugEnabled()) {
+				Logging.connectors.debug("Confluence host = '" + host + "'");
+			}
+
+			if (Logging.connectors.isDebugEnabled()) {
+				Logging.connectors.debug("Confluence port = '" + port + "'");
+			}
+
+			if (StringUtils.isEmpty(path)) {
+				throw new ManifoldCFException("Parameter "
+						+ ConfluenceConfiguration.Server.PATH
+						+ " required but not set");
+			}
+
+			if (Logging.connectors.isDebugEnabled()) {
+				Logging.connectors.debug("Confluence path = '" + path + "'");
+			}
+
+			if (Logging.connectors.isDebugEnabled()) {
+				Logging.connectors.debug("Confluence username = '" + username
+						+ "'");
+			}
+
+			if (Logging.connectors.isDebugEnabled()) {
+				Logging.connectors
+						.debug("Confluence password '" + password != null ? "set"
+								: "not set" + "'");
+			}
+
+			int portInt;
+			if (port != null && port.length() > 0) {
+				try {
+					portInt = Integer.parseInt(port);
+				} catch (NumberFormatException e) {
+					throw new ManifoldCFException("Bad number: "
+							+ e.getMessage(), e);
+				}
+			} else {
+				if (protocol.toLowerCase(Locale.ROOT).equals("http"))
+					portInt = 80;
+				else
+					portInt = 443;
+			}
+
+			/* Generating a client to perform Confluence requests */
+			confluenceClient = new ConfluenceClient(protocol, host, portInt,
+					path, username, password);
+		}
+
 	}
 
 	/**
@@ -101,8 +238,9 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	 */
 	@Override
 	public boolean isConnected() {
-		return super.isConnected();
+		return confluenceClient != null;
 	}
+
 
 	private void fillInServerConfigurationMap(Map<String, String> serverMap,
 			IPasswordMapperActivity mapper, ConfigParams parameters) {
@@ -256,30 +394,36 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 		/* null means process configuration has been successful */
 		return null;
 	}
+	
+	  /*
+	   * (non-Javadoc)
+	   * @see org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#getDefaultAuthorizationResponse(java.lang.String)
+	   */
+	  @Override
+	  public AuthorizationResponse getDefaultAuthorizationResponse(String userName) {
+	    return RESPONSE_UNREACHABLE;
+	  }
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#
-	 * getDefaultAuthorizationResponse(java.lang.String)
-	 */
-	@Override
-	public AuthorizationResponse getDefaultAuthorizationResponse(String userName) {
-		return RESPONSE_UNREACHABLE;
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#
-	 * getAuthorizationResponse(java.lang.String)
-	 */
-	@Override
-	public AuthorizationResponse getAuthorizationResponse(String userName)
-			throws ManifoldCFException {
-		return super.getAuthorizationResponse(userName);
-	}
+	  /*
+	   * (non-Javadoc)
+	   * @see org.apache.manifoldcf.authorities.authorities.BaseAuthorityConnector#getAuthorizationResponse(java.lang.String)
+	   */
+	  @Override
+	  public AuthorizationResponse getAuthorizationResponse(String userName)
+	      throws ManifoldCFException {
+	    try {
+	      ConfluenceUser confluenceUser = confluenceClient.getUserAuthorities(userName);
+	      if (confluenceUser.getUsername() == null
+	          || confluenceUser.getUsername().isEmpty()
+	          || confluenceUser.getAuthorities().isEmpty())
+	        return RESPONSE_USERNOTFOUND;
+	      else
+	        return new AuthorizationResponse(
+	            confluenceUser.getAuthorities().toArray(new String[confluenceUser.getAuthorities().size()]),
+	            AuthorizationResponse.RESPONSE_OK);
+	    } catch (Exception e) {
+	      return RESPONSE_UNREACHABLE;
+	    }
+	  }
 
 }
