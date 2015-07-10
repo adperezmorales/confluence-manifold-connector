@@ -7,7 +7,7 @@ import org.json.JSONObject;
  * <p>ConfluenceResourceBuilder interface</p>
  * @author Antonio David Perez Morales <adperezmorales@gmail.com>
  *
- * @param <T> Subtype of ConfluenceDocument to be built
+ * @param <T> Subtype of ConfluenceResource to be built
  */
 public interface ConfluenceResourceBuilder<T extends ConfluenceResource> {
 

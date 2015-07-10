@@ -132,6 +132,15 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	public ConfluenceRepositoryConnector() {
 		super();
 	}
+	
+	/**
+	 * Set Confluence Client (Mainly for Testing)
+	 * 
+	 * @param confluenceClient
+	 */
+	public void setConfluenceClient(ConfluenceClient confluenceClient){
+		this.confluenceClient = confluenceClient;
+	}
 
 	@Override
 	public String[] getActivitiesList() {
@@ -889,7 +898,8 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			boolean usesDefaultAuthority) throws ManifoldCFException,
 			ServiceInterruption {
 
-		Logging.connectors
+		if(Logging.connectors != null && Logging.connectors.isDebugEnabled())
+			Logging.connectors
 				.debug("Process Confluence documents: Inside processDocuments");
 
 		for (int i = 0; i < documentIdentifiers.length; i++) {
@@ -897,13 +907,13 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			String version = statuses.getIndexedVersionString(pageId);
 
 			long startTime = System.currentTimeMillis();
-			String errorCode = "FAILED";
+			String errorCode = "OK";
 			String errorDesc = StringUtils.EMPTY;
-			Long fileSize = (long) 0;
+			ProcessResult pResult = null;
 			boolean doLog = true;
 
 			try {
-				if (Logging.connectors.isDebugEnabled()) {
+				if (Logging.connectors != null && Logging.connectors.isDebugEnabled()) {
 					Logging.connectors
 							.debug("Confluence: Processing document identifier '"
 									+ pageId + "'");
@@ -915,16 +925,13 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 				}
 
 				if (ConfluenceUtil.isAttachment(pageId)) {
-					fileSize = processPageAsAttachment(pageId, version,
+					pResult = processPageAsAttachment(pageId, version,
 							activities, doLog);
 				}
 				else {
-					fileSize = processPage(pageId, version, activities, doLog,
+					pResult = processPage(pageId, version, activities, doLog,
 							Maps.<String, String> newHashMap());
 				}
-
-				errorCode = "OK";
-
 			} catch (IOException ioe) {
 				handleIOException(ioe);
 			} catch (Exception e) {
@@ -932,10 +939,17 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 			}
 
 			finally {
-				if (doLog)
-					activities.recordActivity(new Long(startTime),
-							ACTIVITY_READ, fileSize, pageId, errorCode,
-							errorDesc, null);
+				if (doLog){
+					if(pResult.errorCode != null && !pResult.errorCode.isEmpty()){
+						activities.recordActivity(new Long(startTime),
+								ACTIVITY_READ, pResult.fileSize, pageId, pResult.errorCode,
+									pResult.errorDescription, null);
+					}else{
+						activities.recordActivity(new Long(startTime),
+								ACTIVITY_READ, pResult.fileSize, pageId, errorCode,
+									errorDesc, null);
+					}
+				}
 			}
 
 		}
@@ -956,14 +970,13 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * @throws IOException
 	 * @throws ServiceInterruption
 	 */
-	private long processPage(String pageId, String version,
+	private ProcessResult processPage(String pageId, String version,
 			IProcessActivity activities, boolean doLog,
 			Map<String, String> extraProperties) throws ManifoldCFException,
 			ServiceInterruption, IOException {
 		Page page = confluenceClient.getPage(pageId);
-		processPageInternal(page, pageId, version, activities, doLog,
+		return processPageInternal(page, pageId, version, activities, doLog,
 				extraProperties);
-		return page.getLength();
 	}
 
 	/**
@@ -980,7 +993,7 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * @throws IOException
 	 * @throws ServiceInterruption
 	 */
-	private long processPageAsAttachment(String pageId, String version,
+	private ProcessResult processPageAsAttachment(String pageId, String version,
 			IProcessActivity activities, boolean doLog)
 			throws ManifoldCFException, ServiceInterruption, IOException {
 
@@ -988,9 +1001,8 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		Attachment attachment = confluenceClient.getAttachment(ids[0]);
 		Map<String, String> extraProperties = Maps.newHashMap();
 		extraProperties.put("attachedBy", ids[1]);
-		processPageInternal(attachment, pageId, version, activities, doLog,
+		return processPageInternal(attachment, pageId, version, activities, doLog,
 				extraProperties);
-		return attachment.getLength();
 	}
 
 	/**
@@ -1009,22 +1021,23 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 	 * @throws IOException
 	 * @throws ServiceInterruption
 	 */
-	private void processPageInternal(Page page,
+	private ProcessResult processPageInternal(Page page,
 			String manifoldDocumentIdentifier, String version,
 			IProcessActivity activities, boolean doLog,
 			Map<String, String> extraProperties) throws ManifoldCFException,
 			ServiceInterruption, IOException {
 
+				
 		/* Remove page if it has no content */
 		/*
 		 * Page does not have content if there was an error trying to get the
 		 * page
 		 */
 		if (!page.hasContent()) {
-			activities.deleteDocument(page.getId());
-			return;
+			activities.deleteDocument(manifoldDocumentIdentifier);
+			return new ProcessResult(page.getLength(), "DELETED", "");
 		}
-		if (Logging.connectors.isDebugEnabled()) {
+		if (Logging.connectors != null && Logging.connectors.isDebugEnabled()) {
 			Logging.connectors.debug("Confluence: This content exists: "
 					+ page.getId());
 		}
@@ -1041,8 +1054,38 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		 * deleted by the framework
 		 */
 		if (version != null && version.equals(df.format(lastModified))) {
-			activities.retainAllComponentDocument(page.getId());
-			return;
+			activities.retainAllComponentDocument(manifoldDocumentIdentifier);
+			return new ProcessResult(page.getLength(), "RETAINED", "");
+		}
+		
+		String lastVersion = df.format(lastModified);
+		
+		if (!activities.checkLengthIndexable(page.getLength())){
+			activities.noDocument(page.getId(), lastVersion);
+			String errorCode = IProcessActivity.EXCLUDED_LENGTH;
+			String errorDesc = "Excluding document because of length ("+page.getLength()+")";
+			return new ProcessResult(page.getLength(), errorCode, errorDesc);
+		}
+
+		if (!activities.checkMimeTypeIndexable(page.getMediaType())) {
+			activities.noDocument(page.getId(), lastVersion);
+			String errorCode = IProcessActivity.EXCLUDED_MIMETYPE;
+			String errorDesc = "Excluding document because of mime type ("+page.getMediaType()+")";
+			return new ProcessResult(page.getLength(), errorCode, errorDesc);
+		}
+
+		if (!activities.checkDateIndexable(lastModified)) {
+			activities.noDocument(page.getId(), lastVersion);
+			String errorCode = IProcessActivity.EXCLUDED_DATE;
+			String errorDesc = "Excluding document because of date ("+lastModified+")";
+			return new ProcessResult(page.getLength(), errorCode, errorDesc);
+		}
+
+		if (!activities.checkURLIndexable(page.getWebUrl())) {
+			activities.noDocument(page.getId(), lastVersion);
+			String errorCode = IProcessActivity.EXCLUDED_URL;
+			String errorDesc = "Excluding document because of URL ('"+page.getWebUrl()+"')";
+			return new ProcessResult(page.getLength(), errorCode, errorDesc);
 		}
 
 		/* Add repository document information */
@@ -1083,8 +1126,9 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 
 		/* Ingest document */
 		activities.ingestDocumentWithException(manifoldDocumentIdentifier,
-				df.format(lastModified), documentURI, rd);
-
+				lastVersion, documentURI, rd);
+		
+		return new ProcessResult(page.getLength(), null, null);
 	}
 
 	/**
@@ -1125,6 +1169,18 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		throw new ManifoldCFException("Exception: " + e.getMessage(), e,
 				ManifoldCFException.REPOSITORY_CONNECTION_ERROR);
 
+	}
+	
+	private class ProcessResult{
+		private long fileSize;
+		private String errorCode;
+		private String errorDescription;
+		
+		private ProcessResult(long fileSize, String errorCode, String errorDescription){
+			this.fileSize = fileSize;
+			this.errorCode = errorCode;
+			this.errorDescription = errorDescription;
+		}
 	}
 
 	/**
