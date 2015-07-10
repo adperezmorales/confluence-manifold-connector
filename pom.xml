@@ -10,7 +10,7 @@
 
 	<modules>
 		<module>confluence-repository-connector</module>
-<!-- 		<module>confluence-authority-connector</module> -->
+ 		<module>confluence-authority-connector</module>
 	</modules>
 
 	<developers>
