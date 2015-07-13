@@ -1053,12 +1053,11 @@ public class ConfluenceRepositoryConnector extends BaseRepositoryConnector {
 		 * default if a document is not retained nor ingested, it will be
 		 * deleted by the framework
 		 */
-		if (version != null && version.equals(df.format(lastModified))) {
-			activities.retainAllComponentDocument(manifoldDocumentIdentifier);
+		String lastVersion = df.format(lastModified);
+		
+		if (!activities.checkDocumentNeedsReindexing(manifoldDocumentIdentifier, lastVersion)) {
 			return new ProcessResult(page.getLength(), "RETAINED", "");
 		}
-		
-		String lastVersion = df.format(lastModified);
 		
 		if (!activities.checkLengthIndexable(page.getLength())){
 			activities.noDocument(page.getId(), lastVersion);
