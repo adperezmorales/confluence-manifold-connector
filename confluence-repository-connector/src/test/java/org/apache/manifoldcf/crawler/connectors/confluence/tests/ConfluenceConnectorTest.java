@@ -123,10 +123,13 @@ public class ConfluenceConnectorTest {
 	      .thenReturn(true);
 	    when(activities.checkURLIndexable(anyString()))
 	      .thenReturn(true);
+	    when(activities.checkDocumentNeedsReindexing(anyString(), anyString()))
+	      .thenReturn(true);
 	    IExistingVersions statuses = mock(IExistingVersions.class);
 	    
-	    String ID = "A";
-	    when(statuses.getIndexedVersionString(ID)).thenReturn(null);
+	    String ID = df.format(date);
+	    when(statuses.getIndexedVersionString(ID)).
+	    	thenReturn(null);
 	    
 	    when(client.getPage(Mockito.anyString())).
 	    	thenReturn(fakePage);
@@ -150,7 +153,7 @@ public class ConfluenceConnectorTest {
 	}
 	
 	@Test
-	public void mockRetainPage() throws Exception{
+	public void mockNeedsReindexing() throws Exception{
 		Page fakePage = mock(Page.class);
 		when(fakePage.hasContent()).thenReturn(true);
 		Date date = new Date();
@@ -169,7 +172,7 @@ public class ConfluenceConnectorTest {
 		
 		connector.processDocuments(new String[]{id}, statuses, new Specification(), activities, 0, true);
 		verify(client, times(1)).getPage(id);
-		verify(activities, times(1)).retainAllComponentDocument(id);
+		verify(activities, times(1)).checkDocumentNeedsReindexing(id, version);
 	}
 	
 	@Test
