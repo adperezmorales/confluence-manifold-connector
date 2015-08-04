@@ -81,6 +81,15 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 	public ConfluenceAuthorityConnector() {
 		super();
 	}
+	
+	/**
+	 * Used Mainly for testing
+	 * 
+	 * @param client Injected Confluence Client
+	 */
+	public void setConfluenceClient(ConfluenceClient client){
+		this.confluenceClient = client;
+	}
 
 	
 
@@ -125,7 +134,6 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 			logger.debug(
 					"Not possible to initialize Confluence client. Reason: {}",
 					e.getMessage());
-			e.printStackTrace();
 		}
 	}
 
