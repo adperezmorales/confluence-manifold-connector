@@ -2,23 +2,22 @@ package org.apache.manifoldcf.crawler.connectors.confluence.client;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.List;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.config.SocketConfig;
 import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClients;
@@ -84,6 +83,7 @@ public class ConfluenceClient {
 	private String password;
 
 	private CloseableHttpClient httpClient;
+	private HttpClientContext httpContext;
 
 	/**
 	 * <p>Creates a new client instance using the given parameters</p>
@@ -122,15 +122,21 @@ public class ConfluenceClient {
 
 	    HttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
 
-	    CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-
 	    // If authentication needed, set that
-	    if (username != null)
+	    // Preemptive authentication not working
+	    /*if (username != null)
 	    {
-	      credentialsProvider.setCredentials(
-	        AuthScope.ANY,
-	        new UsernamePasswordCredentials(username,password));
-	    }
+	    	CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+	    	credentialsProvider.setCredentials(
+	    			AuthScope.ANY,
+	    			new UsernamePasswordCredentials(username,password));
+
+	    	AuthCache authCache = new BasicAuthCache();
+	    	authCache.put(new HttpHost(host, port), new BasicScheme());
+	    	httpContext = HttpClientContext.create();
+	    	httpContext.setCredentialsProvider(credentialsProvider);
+	    	httpContext.setAuthCache(authCache);
+	    }*/
 
 	    RequestConfig.Builder requestBuilder = RequestConfig.custom()
 	      .setCircularRedirectsAllowed(true)
@@ -150,11 +156,12 @@ public class ConfluenceClient {
 	        .setTcpNoDelay(true)
 	        .setSoTimeout(socketTimeout)
 	        .build())
-	      .setDefaultCredentialsProvider(credentialsProvider)
 	      .setSSLSocketFactory(myFactory)
 	      .setRequestExecutor(new HttpRequestExecutor(socketTimeout))
 	      .setRedirectStrategy(new DefaultRedirectStrategy())
-	      .build();	}
+	      .build();
+	    
+	   }
 
 	/**
 	 * <p>Close the client. No further requests can be done</p>
@@ -216,17 +223,18 @@ public class ConfluenceClient {
 	 * @return the created {@code HttpGet} instance
 	 */
 	private HttpGet createGetRequest(String url) {
-		String sanitizedUrl = sanitizeUrl(url);
+		String finalUrl = url += "&os_authType=basic";
+		String sanitizedUrl = sanitizeUrl(finalUrl);
 		HttpGet httpGet = new HttpGet(sanitizedUrl);
 		httpGet.addHeader("Accept", "application/json");
-		/*if (useBasicAuthentication()) {
+		if (useBasicAuthentication()) {
 			httpGet.addHeader(
 					"Authorization",
 					"Basic "
 							+ Base64.encodeBase64String(String.format("%s:%s",
 									this.username, this.password).getBytes(
 									Charset.forName("UTF-8"))));
-		}*/
+		}
 		return httpGet;
 	}
 
@@ -503,14 +511,14 @@ public class ConfluenceClient {
 		HttpPost httpPost = new HttpPost(url);
 		httpPost.addHeader("Accept", "application/json");
 		httpPost.addHeader("Content-Type", "application/json");
-		/*if (useBasicAuthentication()) {
+		if (useBasicAuthentication()) {
 			httpPost.addHeader(
 					"Authorization",
 					"Basic "
 							+ Base64.encodeBase64String(String.format("%s:%s",
 									this.username, this.password).getBytes(
 									Charset.forName("UTF-8"))));
-		}*/
+		}
 		return httpPost;
 	}
 	
@@ -528,7 +536,7 @@ public class ConfluenceClient {
 				url);
 
 		try {
-			HttpResponse response = httpClient.execute(request);
+			HttpResponse response = httpClient.execute(request, httpContext);
 			if (response.getStatusLine().getStatusCode() != 200) {
 				throw new Exception("Confluence error. "
 						+ response.getStatusLine().getStatusCode() + " "
@@ -589,7 +597,6 @@ public class ConfluenceClient {
 	 * <p>Method to check if basic authentication must be used</p>
 	 * @return {@code Boolean} indicating whether basic authentication must be used or not
 	 */
-	@SuppressWarnings("unused")
 	private boolean useBasicAuthentication() {
 		return this.username != null && !"".equals(username)
 				&& this.password != null;
