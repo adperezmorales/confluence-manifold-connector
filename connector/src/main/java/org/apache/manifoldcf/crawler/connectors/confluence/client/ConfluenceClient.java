@@ -9,13 +9,27 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.config.SocketConfig;
+import org.apache.http.conn.HttpClientConnectionManager;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.protocol.HttpRequestExecutor;
 import org.apache.http.util.EntityUtils;
+import org.apache.manifoldcf.connectorcommon.common.InterruptibleSocketFactory;
+import org.apache.manifoldcf.connectorcommon.interfaces.KeystoreManagerFactory;
+import org.apache.manifoldcf.core.interfaces.ManifoldCFException;
 import org.apache.manifoldcf.crawler.connectors.confluence.exception.ConfluenceException;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.Attachment;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.ConfluenceResource;
@@ -81,9 +95,10 @@ public class ConfluenceClient {
 	 * @param path the path to Confluence instance
 	 * @param username the username used to make the requests. Null or empty to use anonymous user
 	 * @param password the password
+	 * @throws ManifoldCFException 
 	 */
 	public ConfluenceClient(String protocol, String host, Integer port,
-			String path, String username, String password) {
+			String path, String username, String password) throws ManifoldCFException {
 		this.protocol = protocol;
 		this.host = host;
 		this.port = port;
@@ -96,10 +111,52 @@ public class ConfluenceClient {
 
 	/**
 	 * <p>Connect methods used to initialize the underlying client</p>
+	 * @throws ManifoldCFException 
 	 */
-	private void connect() {
-		httpClient = HttpClients.createDefault();
-	}
+	private void connect() throws ManifoldCFException {
+
+	    int socketTimeout = 900000;
+	    int connectionTimeout = 60000;
+
+	    javax.net.ssl.SSLSocketFactory httpsSocketFactory = KeystoreManagerFactory.getTrustingSecureSocketFactory();
+	    SSLConnectionSocketFactory myFactory = new SSLConnectionSocketFactory(new InterruptibleSocketFactory(httpsSocketFactory,connectionTimeout),
+	      SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+
+	    HttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+
+	    CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+
+	    // If authentication needed, set that
+	    if (username != null)
+	    {
+	      credentialsProvider.setCredentials(
+	        AuthScope.ANY,
+	        new UsernamePasswordCredentials(username,password));
+	    }
+
+	    RequestConfig.Builder requestBuilder = RequestConfig.custom()
+	      .setCircularRedirectsAllowed(true)
+	      .setSocketTimeout(socketTimeout)
+	      .setStaleConnectionCheckEnabled(true)
+	      .setExpectContinueEnabled(true)
+	      .setConnectTimeout(connectionTimeout)
+	      .setConnectionRequestTimeout(socketTimeout);
+
+
+	    httpClient = HttpClients.custom()
+	      .setConnectionManager(connectionManager)
+	      .setMaxConnTotal(1)
+	      .disableAutomaticRetries()
+	      .setDefaultRequestConfig(requestBuilder.build())
+	      .setDefaultSocketConfig(SocketConfig.custom()
+	        .setTcpNoDelay(true)
+	        .setSoTimeout(socketTimeout)
+	        .build())
+	      .setDefaultCredentialsProvider(credentialsProvider)
+	      .setSSLSocketFactory(myFactory)
+	      .setRequestExecutor(new HttpRequestExecutor(socketTimeout))
+	      .setRedirectStrategy(new DefaultRedirectStrategy())
+	      .build();	}
 
 	/**
 	 * <p>Close the client. No further requests can be done</p>
@@ -164,14 +221,14 @@ public class ConfluenceClient {
 		String sanitizedUrl = sanitizeUrl(url);
 		HttpGet httpGet = new HttpGet(sanitizedUrl);
 		httpGet.addHeader("Accept", "application/json");
-		if (useBasicAuthentication()) {
+		/*if (useBasicAuthentication()) {
 			httpGet.addHeader(
 					"Authorization",
 					"Basic "
 							+ Base64.encodeBase64String(String.format("%s:%s",
 									this.username, this.password).getBytes(
 									Charset.forName("UTF-8"))));
-		}
+		}*/
 		return httpGet;
 	}
 
@@ -448,14 +505,14 @@ public class ConfluenceClient {
 		HttpPost httpPost = new HttpPost(url);
 		httpPost.addHeader("Accept", "application/json");
 		httpPost.addHeader("Content-Type", "application/json");
-		if (useBasicAuthentication()) {
+		/*if (useBasicAuthentication()) {
 			httpPost.addHeader(
 					"Authorization",
 					"Basic "
 							+ Base64.encodeBase64String(String.format("%s:%s",
 									this.username, this.password).getBytes(
 									Charset.forName("UTF-8"))));
-		}
+		}*/
 		return httpPost;
 	}
 	
@@ -467,7 +524,6 @@ public class ConfluenceClient {
 	 */
 	private HttpResponse executeRequest(HttpUriRequest request)
 			throws Exception {
-		CloseableHttpClient httpClient = HttpClients.createDefault();
 		String url = request.getURI().toString();
 		logger.debug(
 				"[Processing] Hitting url for getting document content : {}",
