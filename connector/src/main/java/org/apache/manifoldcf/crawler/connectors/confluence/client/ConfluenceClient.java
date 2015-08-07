@@ -2,10 +2,8 @@ package org.apache.manifoldcf.crawler.connectors.confluence.client;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.List;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -306,7 +304,7 @@ public class ConfluenceClient {
 			ConfluenceResponse<T> response = ConfluenceResponse
 					.fromJson(responseObject, builder);
 			if (response.getResults().size() == 0) {
-				logger.warn("[Processing] No pages found in the Confluence response");
+				logger.debug("[Processing] No {} found in the Confluence response", builder.getType().getSimpleName());
 			}
 
 			return response;
@@ -591,6 +589,7 @@ public class ConfluenceClient {
 	 * <p>Method to check if basic authentication must be used</p>
 	 * @return {@code Boolean} indicating whether basic authentication must be used or not
 	 */
+	@SuppressWarnings("unused")
 	private boolean useBasicAuthentication() {
 		return this.username != null && !"".equals(username)
 				&& this.password != null;

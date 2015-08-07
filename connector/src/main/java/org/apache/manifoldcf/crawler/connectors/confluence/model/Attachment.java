@@ -104,5 +104,10 @@ public class Attachment extends Page {
 			return attachment;
 		}
 
+		@Override
+		public Class<Attachment> getType() {
+			return Attachment.class;
+		}
+
 	}
 }
