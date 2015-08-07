@@ -77,5 +77,10 @@ public class Label extends ConfluenceResource{
 
 		}
 
+		@Override
+		public Class<Label> getType() {
+			return Label.class;
+		}
+
 	}
 }

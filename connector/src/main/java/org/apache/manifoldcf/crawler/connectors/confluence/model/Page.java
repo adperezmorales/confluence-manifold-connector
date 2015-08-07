@@ -348,5 +348,10 @@ public class Page extends ConfluenceResource{
 			}
 			return "";
 		}
+
+		@Override
+		public Class<Page> getType() {
+			return Page.class;
+		}
 	}
 }
