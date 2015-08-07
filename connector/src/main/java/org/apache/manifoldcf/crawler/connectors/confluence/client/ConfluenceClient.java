@@ -214,6 +214,28 @@ public class ConfluenceClient {
 	}
 
 	/**
+	 * <p>Check method used to test if Confluence instance is up and running when using Authority connector (JSON-RPC API)</p>
+	 * <p>This method will be deleted when all JSON-RPC methods are available through the REST API
+	 * 
+	 * @return a {@code Boolean} indicating whether the Confluence instance is alive or not
+	 * 
+	 * @throws Exception
+	 */
+	public boolean checkAuth() throws Exception {
+		try {
+			if (httpClient == null) {
+				connect();
+			}
+			getSpaces();
+			return true;
+		} catch (Exception e) {
+			logger.warn(
+					"[Checking connection] Confluence server appears to be down",
+					e);
+			throw e;
+		}
+	}
+	/**
 	 * <p>
 	 * Create a get request for the given url
 	 * </p>
@@ -223,7 +245,7 @@ public class ConfluenceClient {
 	 * @return the created {@code HttpGet} instance
 	 */
 	private HttpGet createGetRequest(String url) {
-		String finalUrl = url += "&os_authType=basic";
+		String finalUrl = useBasicAuthentication() ? url + "&os_authType=basic": url;
 		String sanitizedUrl = sanitizeUrl(finalUrl);
 		HttpGet httpGet = new HttpGet(sanitizedUrl);
 		httpGet.addHeader("Accept", "application/json");

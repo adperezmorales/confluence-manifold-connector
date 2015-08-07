@@ -146,7 +146,7 @@ public class ConfluenceAuthorityConnector extends BaseAuthorityConnector {
 			if (!isConnected()) {
 				initConfluenceClient();
 			}
-			Boolean result = confluenceClient.check();
+			Boolean result = confluenceClient.checkAuth();
 			if (result)
 				return super.check();
 			else
