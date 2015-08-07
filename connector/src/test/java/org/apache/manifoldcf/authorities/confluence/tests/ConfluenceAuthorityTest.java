@@ -36,7 +36,7 @@ public class ConfluenceAuthorityTest {
 	
 	@Test
 	public void checkMockInjection() throws Exception{
-		when(client.check()).thenReturn(true);
+		when(client.checkAuth()).thenReturn(true);
 		Assert.assertEquals(connector.check(), "Connection working");
 	}
 	
