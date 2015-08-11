@@ -16,6 +16,7 @@ import org.apache.manifoldcf.core.interfaces.IPasswordMapperActivity;
 import org.apache.manifoldcf.core.interfaces.IPostParameters;
 import org.apache.manifoldcf.core.interfaces.IThreadContext;
 import org.apache.manifoldcf.core.interfaces.ManifoldCFException;
+import org.apache.manifoldcf.crawler.connectors.confluence.ConfluenceConfiguration;
 import org.apache.manifoldcf.crawler.connectors.confluence.client.ConfluenceClient;
 import org.apache.manifoldcf.crawler.connectors.confluence.model.ConfluenceUser;
 import org.apache.manifoldcf.crawler.system.Logging;

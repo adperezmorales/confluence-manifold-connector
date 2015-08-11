@@ -69,6 +69,7 @@ public class ConfluenceClient {
 	private static final String VIEW_PERMISSION = "view";
 	
 	private static final String CONTENT_PATH = "/rest/api/content";
+	private static final String AUTHORITY_PATH = "/rpc/json-rpc/confluenceservice-v2/";
 	private static final String EXPANDABLE_PARAMETERS = "expand=body.view,metadata.labels,space,history,version";
 	private static final String CHILD_ATTACHMENTS_PATH = "/child/attachment/";
 	private static final String LABEL_PATH = "/label";
@@ -642,8 +643,8 @@ public class ConfluenceClient {
 	}
 	
 	private Spaces getSpaces() throws Exception {
-		String url = String.format("%s://%s:%s%sgetSpaces", protocol, host,
-				port, path);
+		String url = String.format("%s://%s:%s%s%sgetSpaces", protocol, host,
+				port, path, AUTHORITY_PATH);
 
 		logger.debug(
 				"[Processing] Hitting url for getting Confluence spaces : {}",
@@ -664,8 +665,8 @@ public class ConfluenceClient {
 	}
 	
 	private List<String> getSpacePermissionsForUser(Space space, String username) throws Exception {
-		String url = String.format("%s://%s:%s%sgetPermissionsForUser", protocol, host,
-				port, path);
+		String url = String.format("%s://%s:%s%s%sgetPermissionsForUser", protocol, host,
+				port, path, AUTHORITY_PATH);
 
 		logger.debug(
 				"[Processing] Hitting url {} for getting Confluence permissions for user {} in space {}",
